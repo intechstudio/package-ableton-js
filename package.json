@@ -1,0 +1,19 @@
+{
+  "name": "package-ableton-js",
+  "version": "0.0.1",
+  "description": "Package using ableton-js to integrate with Ableton.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "format": "prettier --write ."
+  },
+  "author": "",
+  "license": "ISC",
+  "grid_editor": {
+    "preference": "preference.html"
+  },
+  "dependencies": {
+    "ableton-js": "^3.4.3",
+    "patch-package": "^8.0.0"
+  }
+}
