@@ -11,17 +11,45 @@ const { NavDirection } = require("ableton-js/ns/application-view");
 const { ClipSlot } = require("ableton-js/ns/clip-slot");
 
 const BUTTON_ARRAY = [
-  [{ dx: 0, dy: 0, index: 3 }, { dx: 0, dy: 0, index: 7 }, { dx: 0, dy: -1, index: 3 }, { dx: 0, dy: -1, index: 7 }, { dx: 0, dy: -1, index: 11 }, { dx: 0, dy: -1, index: 15 }],
-  [{ dx: 0, dy: 0, index: 2 }, { dx: 0, dy: 0, index: 6 }, { dx: 0, dy: -1, index: 2 }, { dx: 0, dy: -1, index: 6 }, { dx: 0, dy: -1, index: 10 }, { dx: 0, dy: -1, index: 14 }],
-  [{ dx: 0, dy: 0, index: 1 }, { dx: 0, dy: 0, index: 5 }, { dx: 0, dy: -1, index: 1 }, { dx: 0, dy: -1, index: 5 }, { dx: 0, dy: -1, index: 9 }, { dx: 0, dy: -1, index: 13 }],
-  [{ dx: 0, dy: 0, index: 0 }, { dx: 0, dy: 0, index: 4 }, { dx: 0, dy: -1, index: 0 }, { dx: 0, dy: -1, index: 4 }, { dx: 0, dy: -1, index: 8 }, { dx: 0, dy: -1, index: 12 }],
-]
+  [
+    { dx: 0, dy: 0, index: 3 },
+    { dx: 0, dy: 0, index: 7 },
+    { dx: 0, dy: -1, index: 3 },
+    { dx: 0, dy: -1, index: 7 },
+    { dx: 0, dy: -1, index: 11 },
+    { dx: 0, dy: -1, index: 15 },
+  ],
+  [
+    { dx: 0, dy: 0, index: 2 },
+    { dx: 0, dy: 0, index: 6 },
+    { dx: 0, dy: -1, index: 2 },
+    { dx: 0, dy: -1, index: 6 },
+    { dx: 0, dy: -1, index: 10 },
+    { dx: 0, dy: -1, index: 14 },
+  ],
+  [
+    { dx: 0, dy: 0, index: 1 },
+    { dx: 0, dy: 0, index: 5 },
+    { dx: 0, dy: -1, index: 1 },
+    { dx: 0, dy: -1, index: 5 },
+    { dx: 0, dy: -1, index: 9 },
+    { dx: 0, dy: -1, index: 13 },
+  ],
+  [
+    { dx: 0, dy: 0, index: 0 },
+    { dx: 0, dy: 0, index: 4 },
+    { dx: 0, dy: -1, index: 0 },
+    { dx: 0, dy: -1, index: 4 },
+    { dx: 0, dy: -1, index: 8 },
+    { dx: 0, dy: -1, index: 12 },
+  ],
+];
 
 // Log all messages to the console
 const ableton = new abletonjs.Ableton({ logger: console });
 
 async function startAbleton() {
-  return await ableton.start()
+  return await ableton.start();
 }
 
 exports.loadPackage = async function (gridController, persistedData) {
@@ -29,9 +57,11 @@ exports.loadPackage = async function (gridController, persistedData) {
   await startAbleton()
     .then(() => {
       //clipListeners()
-      sceneListeners()
+      sceneListeners();
     })
-    .catch(error => { console.warn(error) });
+    .catch((error) => {
+      console.warn(error);
+    });
 };
 
 exports.unloadPackage = async function () {
@@ -48,7 +78,6 @@ exports.addMessagePort = async function (port, senderId) {
     windowMessagePort = port;
     port.start();
   } else {
-
     port.on("message", (e) => {
       onMessage(port, e.data);
     });
@@ -64,11 +93,20 @@ exports.addMessagePort = async function (port, senderId) {
 };
 
 async function sessionScroll(dir) {
-  await ableton.application.view.scrollView("Session", NavDirection[dir]).catch(error => { console.warn(error) });
+  await ableton.application.view
+    .scrollView("Session", NavDirection[dir])
+    .catch((error) => {
+      console.warn(error);
+    });
 }
 
 async function fireSelectedScene() {
-  await ableton.song.view.get('selected_scene').then(scene => scene.fire()).catch(error => { console.warn(error) });
+  await ableton.song.view
+    .get("selected_scene")
+    .then((scene) => scene.fire())
+    .catch((error) => {
+      console.warn(error);
+    });
 }
 
 /**
@@ -79,12 +117,15 @@ async function fireSelectedScene() {
  */
 async function getClipSlot(rowNumber, columnNumber) {
   if (rowNumber == undefined || columnNumber == undefined) return;
-  return await ableton.song.get('tracks')
-    .then(
-      tracks => tracks[columnNumber].get('clip_slots')
-        .then(async clip_slots => clip_slots[rowNumber])
-    ).catch(error => {
-      console.warn(error)
+  return await ableton.song
+    .get("tracks")
+    .then((tracks) =>
+      tracks[columnNumber]
+        .get("clip_slots")
+        .then(async (clip_slots) => clip_slots[rowNumber]),
+    )
+    .catch((error) => {
+      console.warn(error);
     });
 }
 
@@ -129,69 +170,59 @@ async function getClipSlot(rowNumber, columnNumber) {
 // const currentScene = await ableton.song.view.get('selected_scene')
 // const selectedSceneIndex = allScenes.findIndex(scene => scene.raw.id === currentScene.raw.id)
 
-
 async function sceneListeners() {
   // const columns = 6; // tracks
   // const rows = 20; // scenes
-  const allScenes = await ableton.song.get('scenes');
-  const allTracks = await ableton.song.get('tracks');
+  const allScenes = await ableton.song.get("scenes");
+  const allTracks = await ableton.song.get("tracks");
   try {
     allScenes.forEach((scene, row) => {
-      scene.get('clip_slots').then(clip_slots =>
-        clip_slots.forEach((clip_slot, col) => {
-          clip_slot.addListener('is_triggered', (bool) => {
-            // after trigger, refetch the clip slot status
-            getClipSlot(row, col).then(clip_slot => {
-              setGridLedStatus(row, col, clip_slot)
-            })
+      scene
+        .get("clip_slots")
+        .then((clip_slots) =>
+          clip_slots.forEach((clip_slot, col) => {
+            clip_slot.addListener("is_triggered", (bool) => {
+              // after trigger, refetch the clip slot status
+              getClipSlot(row, col).then((clip_slot) => {
+                setGridLedStatus(row, col, clip_slot);
+              });
+            });
 
-            // yeeet
-            // clip_slots.forEach((clip_slot, col) => {
-            //   clip_slot.get('is_playing').then(bool => {
-            //     console.log("clip is playing", col, row, bool)
-            //     //setGridLedIntensity(col, row, bool ? 255 : 0)
-            //   })
-            // })
-          })
-
-          //load the clip color
-          clip_slot.get('clip').then(clip => {
-            if (clip) {
-              clip.get('color').then(color => {
-                setGridLedColor(row, col, color.color)
-                setGridLedIntensity(row, col, 255)
-              })
-            } else {
-              setGridLedColor(row, col, "000000")
-            }
-          })
-        })
-      ).catch((error) => { console.warn(error) })
-    })
+            //load the clip color
+            clip_slot.get("clip").then((clip) => {
+              if (clip) {
+                clip.get("color").then((color) => {
+                  setGridLedColor(row, col, color.color);
+                  setGridLedIntensity(row, col, 255);
+                });
+              } else {
+                setGridLedColor(row, col, "000000");
+              }
+            });
+          }),
+        )
+        .catch((error) => {
+          console.warn(error);
+        });
+    });
 
     allTracks.forEach((track, col) => {
-      track.get('clip_slots').then(clip_slots => {
+      track.get("clip_slots").then((clip_slots) => {
         clip_slots.forEach((clip_slot, row) => {
-          clip_slot.addListener('is_triggered', (bool) => {
+          clip_slot.addListener("is_triggered", (bool) => {
             // after trigger, refetch the clip slot status
             clip_slots.forEach((clip_slot, indx) => {
-              clip_slot.get('is_playing').then(bool => {
-                console.log("clip is playing", row, indx, bool)
-                setGridLedIntensity(indx, col, bool ? 255 : 50)
-              })
-            })
-            // getClipSlot(row, col).then(clip_slot => {
-            //   setGridLedStatus(row, col, clip_slot)
-            // })
-          })
-        })
-      })
-    })
+              clip_slot.get("is_playing").then((bool) => {
+                setGridLedIntensity(indx, col, bool ? 255 : 50);
+              });
+            });
+          });
+        });
+      });
+    });
   } catch (error) {
-    console.warn("trycatch", error)
+    console.warn("trycatch", error);
   }
-
-
 }
 
 /**
@@ -200,12 +231,12 @@ async function sceneListeners() {
  * @param {number} columnNumber //  track
  */
 async function launchClip(rowNumber, columnNumber) {
-  const clipSlot = await getClipSlot(rowNumber, columnNumber)
+  const clipSlot = await getClipSlot(rowNumber, columnNumber);
   if (clipSlot.raw.has_clip) {
     if (clipSlot.raw.is_playing) {
       clipSlot.stop();
     } else {
-      clipSlot.fire()
+      clipSlot.fire();
     }
   }
 }
@@ -215,34 +246,31 @@ function hexToRgb(hex) {
   var r = (bigint >> 16) & 255;
   var g = (bigint >> 8) & 255;
   var b = bigint & 255;
-  return [r, g, b]
+  return [r, g, b];
 }
 
-
 async function setGridLedColor(row, col, color) {
-  const BUTTON = BUTTON_ARRAY[row][col]
+  const BUTTON = BUTTON_ARRAY[row][col];
   const rgb = hexToRgb(color);
-  const ledColorScript = `glc(${BUTTON.index},1,${rgb[0]},${rgb[1]},${rgb[2]})`
-  sendImmediate(BUTTON.dx, BUTTON.dy, ledColorScript)
+  const ledColorScript = `glc(${BUTTON.index},1,${rgb[0]},${rgb[1]},${rgb[2]})`;
+  sendImmediate(BUTTON.dx, BUTTON.dy, ledColorScript);
 }
 
 async function setGridLedStatus(row, col, clip_slot) {
-
   if (!clip_slot) return;
 
-  const BUTTON = BUTTON_ARRAY[row][col]
+  const BUTTON = BUTTON_ARRAY[row][col];
 
-
-  let ledAnimationScript = ""
+  let ledAnimationScript = "";
   if (clip_slot.raw.is_triggered == true) {
     // start animation
-    ledAnimationScript = `glpfs(${BUTTON.index},1,0,4,1)`
+    ledAnimationScript = `glpfs(${BUTTON.index},1,0,4,1)`;
   } else {
     // stop animation
-    ledAnimationScript = `glpfs(${BUTTON.index},1,0,0,0)`
+    ledAnimationScript = `glpfs(${BUTTON.index},1,0,0,0)`;
   }
 
-  sendImmediate(BUTTON.dx, BUTTON.dy, ledAnimationScript)
+  sendImmediate(BUTTON.dx, BUTTON.dy, ledAnimationScript);
 
   let intensity = 0;
 
@@ -252,19 +280,17 @@ async function setGridLedStatus(row, col, clip_slot) {
     intensity = 0;
   }
 
-  let ledIntensityScript = `glp(${BUTTON.index},1,${intensity}) `
+  let ledIntensityScript = `glp(${BUTTON.index},1,${intensity}) `;
 
-  sendImmediate(BUTTON.dx, BUTTON.dy, ledIntensityScript)
+  sendImmediate(BUTTON.dx, BUTTON.dy, ledIntensityScript);
 }
 
-
 async function setGridLedIntensity(row, col, intensity = 0) {
+  const BUTTON = BUTTON_ARRAY[row][col];
 
-  const BUTTON = BUTTON_ARRAY[row][col]
+  let ledIntensityScript = `glp(${BUTTON.index},1,${intensity}) `;
 
-  let ledIntensityScript = `glp(${BUTTON.index},1,${intensity}) `
-
-  sendImmediate(BUTTON.dx, BUTTON.dy, ledIntensityScript)
+  sendImmediate(BUTTON.dx, BUTTON.dy, ledIntensityScript);
 }
 
 async function sendImmediate(dx, dy, script) {
@@ -272,28 +298,26 @@ async function sendImmediate(dx, dy, script) {
     id: "immediate",
     target_dx: dx,
     target_dy: dy,
-    script: `<?lua ${script} ?>`
+    script: `<?lua ${script} ?>`,
   });
 }
 
-
 exports.sendMessage = async function (args) {
-  console.log("sendMessage", args)
+  console.log("sendMessage", args);
   if (args[0] == "launch-clip") {
-    launchClip(args[1], args[2])
+    launchClip(args[1], args[2]);
   }
   if (args[0] == "session-scroll") {
-    sessionScroll(args[1])
+    sessionScroll(args[1]);
   }
   if (args[0] == "fire-scene") {
-    fireSelectedScene()
+    fireSelectedScene();
   }
 };
 
 async function onMessage(port, data) {
-  console.log("ONMESSAGE", data)
+  console.log("ONMESSAGE", data);
   if (data.type == "scroll-up") {
-    sessionScroll()
+    sessionScroll();
   }
-
 }

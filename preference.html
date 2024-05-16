@@ -5,7 +5,6 @@
 
 <script>
   {
-
     const messagePort = createPackageMessagePort("package-ableton-js");
 
     messagePort.onmessage = (e) => {
@@ -18,10 +17,7 @@
     });
 
     function updateConfiguration(e) {
-
-      messagePort.postMessage({
-
-      });
+      messagePort.postMessage({});
     }
 
     function makeItGreen() {
@@ -44,6 +40,5 @@
 
     document.getElementById("red").addEventListener("click", makeItRed);
     document.getElementById("green").addEventListener("click", makeItGreen);
-
   }
 </script>
