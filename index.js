@@ -10,6 +10,13 @@ const abletonjs = require("ableton-js");
 const { NavDirection } = require("ableton-js/ns/application-view");
 const { ClipSlot } = require("ableton-js/ns/clip-slot");
 
+const SCENE_BUTTON_ARRAY = [
+  { dx: 0, dy: 0, index: 4 },
+  { dx: 0, dy: 0, index: 5 },
+  { dx: 0, dy: 0, index: 6 },
+  { dx: 0, dy: 0, index: 7 },
+];
+
 const BUTTON_ARRAY = [
   [
     { dx: 0, dy: -1, index: 3 },
@@ -90,6 +97,7 @@ async function sessionScroll(dir) {
     .scrollView("Session", NavDirection[dir])
     .then(() => {
       currentBox()
+      currentScenes()
     })
     .catch((error) => {
       console.warn(error);
@@ -138,11 +146,59 @@ async function currentBox() {
   const scenes = await ableton.song.get("scenes");
   const selectedScene = await ableton.song.view.get('selected_scene')
   const selectedSceneIndex = scenes.findIndex(scene => scene.raw.id === selectedScene.raw.id)
-  sceneListenerBox(scenes.slice(selectedSceneIndex, selectedSceneIndex + 4))
+  clipListenerBox(scenes.slice(selectedSceneIndex, selectedSceneIndex + 4))
+}
+
+async function currentScenes() {
+  const scenes = await ableton.song.get("scenes");
+  const selectedScene = await ableton.song.view.get('selected_scene')
+  const selectedSceneIndex = scenes.findIndex(scene => scene.raw.id === selectedScene.raw.id)
+  sceneListener(scenes.slice(selectedSceneIndex, selectedSceneIndex + 4))
+}
+
+let activeSceneSubscribtions = [];
+async function sceneListener(scenes) {
+  try {
+
+    activeSceneSubscribtions.forEach(sub => sub());
+
+    activeSceneSubscribtions = [];
+
+    const promises = scenes.map(async (scene, row) => {
+
+      const sceneListener = await scene.addListener("is_triggered", async (bool) => {
+        const led = SCENE_BUTTON_ARRAY[row];
+        setGridLedAnimation(led, bool, false);
+      });
+
+      activeSceneSubscribtions.push(sceneListener);
+
+      return scene.get('color').then(color => { return { row: row, color: color.color } })
+    });
+
+    const sceneColors = await Promise.all(promises);
+
+    let script = "";
+    sceneColors.forEach((scene) => {
+      const { row, color } = scene;
+      const BUTTON = SCENE_BUTTON_ARRAY[row];
+      const rgb = hexToRgb(color);
+      script += ` glc(${BUTTON.index},1,${rgb[0]},${rgb[1]},${rgb[2]})`
+      if (color !== "000000") {
+        script += ` glp(${BUTTON.index},1,50) `
+      }
+    })
+
+    sendImmediate(0, 0, script);
+
+
+  } catch (error) {
+    console.warn(error)
+  }
 }
 
 let activeClipSubscribtions = [];
-async function sceneListenerBox(scenes) {
+async function clipListenerBox(scenes) {
 
   try {
     // cleanup subscribers
@@ -175,7 +231,8 @@ async function sceneListenerBox(scenes) {
 
           // Collect subscription promises
           const subscriberPromise = await clip_slot.addListener("is_triggered", async (bool) => {
-            setGridLedAnimation(row, col, bool, clip_slot.raw.has_clip);
+            const led = BUTTON_ARRAY[row][col];
+            setGridLedAnimation(led, bool, clip_slot.raw.has_clip);
           });
 
           activeClipSubscribtions.push(subscriberPromise);
@@ -227,9 +284,9 @@ async function multiSetGridLedColor(clipMatix) {
 
 }
 
-function setGridLedAnimation(row, col, isTriggered, hasClip) {
+function setGridLedAnimation(led, isTriggered, hasClip) {
   try {
-    const BUTTON = BUTTON_ARRAY[row][col];
+    const BUTTON = led
 
     let script = "";
     if (isTriggered == true) {
@@ -248,45 +305,6 @@ function setGridLedAnimation(row, col, isTriggered, hasClip) {
     console.warn(error);
   }
 }
-
-async function sceneListeners() {
-  const allScenes = await ableton.song.get("scenes");
-  try {
-    allScenes.forEach((scene, row) => {
-      scene
-        .get("clip_slots")
-        .then((clip_slots) => {
-          clip_slots.forEach((clip_slot, col) => {
-            clip_slot.addListener("is_triggered", (bool) => {
-              // after trigger, refetch the clip slot status
-              getClipSlot(row, col).then((clip_slot) => {
-                setGridLedStatus(row, col, clip_slot);
-              });
-            });
-
-            //load the clip color
-            clip_slot.get("clip").then((clip) => {
-              if (clip) {
-                clip.get("color").then((color) => {
-                  setGridLedColor(row, col, color.color);
-                  setGridLedIntensity(row, col, 255);
-                });
-              } else {
-                setGridLedColor(row, col, "000000");
-              }
-            });
-          })
-        }
-        )
-        .catch((error) => {
-          console.warn(error);
-        });
-    });
-  } catch (error) {
-    console.warn("trycatch", error);
-  }
-}
-
 
 
 /**
