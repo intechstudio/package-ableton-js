@@ -12,32 +12,24 @@ const { ClipSlot } = require("ableton-js/ns/clip-slot");
 
 const BUTTON_ARRAY = [
   [
-    { dx: 0, dy: 0, index: 3 },
-    { dx: 0, dy: 0, index: 7 },
     { dx: 0, dy: -1, index: 3 },
     { dx: 0, dy: -1, index: 7 },
     { dx: 0, dy: -1, index: 11 },
     { dx: 0, dy: -1, index: 15 },
   ],
   [
-    { dx: 0, dy: 0, index: 2 },
-    { dx: 0, dy: 0, index: 6 },
     { dx: 0, dy: -1, index: 2 },
     { dx: 0, dy: -1, index: 6 },
     { dx: 0, dy: -1, index: 10 },
     { dx: 0, dy: -1, index: 14 },
   ],
   [
-    { dx: 0, dy: 0, index: 1 },
-    { dx: 0, dy: 0, index: 5 },
     { dx: 0, dy: -1, index: 1 },
     { dx: 0, dy: -1, index: 5 },
     { dx: 0, dy: -1, index: 9 },
     { dx: 0, dy: -1, index: 13 },
   ],
   [
-    { dx: 0, dy: 0, index: 0 },
-    { dx: 0, dy: 0, index: 4 },
     { dx: 0, dy: -1, index: 0 },
     { dx: 0, dy: -1, index: 4 },
     { dx: 0, dy: -1, index: 8 },
@@ -174,12 +166,12 @@ async function sceneListeners() {
   // const columns = 6; // tracks
   // const rows = 20; // scenes
   const allScenes = await ableton.song.get("scenes");
-  const allTracks = await ableton.song.get("tracks");
+
   try {
     allScenes.forEach((scene, row) => {
       scene
         .get("clip_slots")
-        .then((clip_slots) =>
+        .then((clip_slots) => {
           clip_slots.forEach((clip_slot, col) => {
             clip_slot.addListener("is_triggered", (bool) => {
               // after trigger, refetch the clip slot status
@@ -199,26 +191,12 @@ async function sceneListeners() {
                 setGridLedColor(row, col, "000000");
               }
             });
-          }),
+          })
+        }
         )
         .catch((error) => {
           console.warn(error);
         });
-    });
-
-    allTracks.forEach((track, col) => {
-      track.get("clip_slots").then((clip_slots) => {
-        clip_slots.forEach((clip_slot, row) => {
-          clip_slot.addListener("is_triggered", (bool) => {
-            // after trigger, refetch the clip slot status
-            clip_slots.forEach((clip_slot, indx) => {
-              clip_slot.get("is_playing").then((bool) => {
-                setGridLedIntensity(indx, col, bool ? 255 : 50);
-              });
-            });
-          });
-        });
-      });
     });
   } catch (error) {
     console.warn("trycatch", error);
@@ -232,13 +210,8 @@ async function sceneListeners() {
  */
 async function launchClip(rowNumber, columnNumber) {
   const clipSlot = await getClipSlot(rowNumber, columnNumber);
-  if (clipSlot.raw.has_clip) {
-    if (clipSlot.raw.is_playing) {
-      clipSlot.stop();
-    } else {
-      clipSlot.fire();
-    }
-  }
+  // firing empty clip slot will stop clips on track
+  clipSlot.fire();
 }
 
 function hexToRgb(hex) {
