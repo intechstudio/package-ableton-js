@@ -53,7 +53,7 @@ async function startAbleton() {
 
 exports.loadPackage = async function (gridController, persistedData) {
   controller = gridController;
-  /*await startAbleton()
+  await startAbleton()
     .then(() => {
       listenForAddedOrDeletedScenes();
       currentBox();
@@ -61,7 +61,7 @@ exports.loadPackage = async function (gridController, persistedData) {
     })
     .catch((error) => {
       console.warn(error);
-    });*/
+    });
 };
 
 exports.unloadPackage = async function () {
