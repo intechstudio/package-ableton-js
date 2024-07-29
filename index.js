@@ -53,7 +53,7 @@ async function startAbleton() {
 
 exports.loadPackage = async function (gridController, persistedData) {
   controller = gridController;
-  await startAbleton()
+  /*await startAbleton()
     .then(() => {
       listenForAddedOrDeletedScenes();
       currentBox();
@@ -61,7 +61,7 @@ exports.loadPackage = async function (gridController, persistedData) {
     })
     .catch((error) => {
       console.warn(error);
-    });
+    });*/
 };
 
 exports.unloadPackage = async function () {
@@ -394,8 +394,8 @@ async function setGridLedIntensity(row, col, intensity = 0) {
 }
 
 async function sendImmediate(dx, dy, script) {
-  controller.sendMessageToRuntime({
-    id: "immediate",
+  controller.sendMessageToEditor({
+    type: "immediate",
     target_dx: dx,
     target_dy: dy,
     script: `<?lua ${script} ?>`,

@@ -10,7 +10,8 @@
   "author": "",
   "license": "ISC",
   "grid_editor": {
-    "preference": "preference.html"
+    "componentsPath": "components/dist/components.js",
+    "preferenceComponent": "ableton-preference"
   },
   "dependencies": {
     "ableton-js": "^3.4.3",
