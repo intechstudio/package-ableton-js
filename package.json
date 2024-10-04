@@ -14,7 +14,7 @@
     "preferenceComponent": "ableton-preference"
   },
   "dependencies": {
-    "ableton-js": "^3.4.3",
+    "ableton-js": "^3.4.6",
     "patch-package": "^8.0.0"
   }
 }

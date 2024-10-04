@@ -197,6 +197,7 @@ async function sceneListener(scenes) {
   }
 }
 
+
 let activeClipSubscribtions = [];
 async function clipListenerBox(scenes) {
 
@@ -421,6 +422,6 @@ exports.sendMessage = async function (args) {
 async function onMessage(port, data) {
   console.log("ONMESSAGE", data);
   if (data.type == "scroll-up") {
-    sessionScroll();
+    //sessionScroll();
   }
 }
