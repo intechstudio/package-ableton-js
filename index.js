@@ -34,7 +34,6 @@ exports.loadPackage = async function (gridController, persistedData) {
 
   myFirstVariable = persistedData?.myFirstVariable ?? false;
 
-
 };
 
 exports.unloadPackage = async function () {
@@ -60,7 +59,7 @@ exports.addMessagePort = async function (port, senderId) {
       
       if (e.data.type === "offset") {
         const {track_offset, scene_offset} = e.data;
-        ableton.updateSessionBoxListeners(track_offset, scene_offset);
+        ableton.setSessionBoxOffset(track_offset, scene_offset);
       }
 
       if (e.data.type === "set-setting") {

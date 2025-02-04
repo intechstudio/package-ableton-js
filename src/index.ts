@@ -22,6 +22,14 @@ let SESSION_RING: SessionRing = {
 const init = async () => {
   await ableton.start();
   setupSessionBox(4,4);
+
+  ableton.song.addListener("scenes", (scenes) => {
+    console.log("Scenes changed")
+  })
+
+  ableton.song.addListener("tracks", (tracks)=> {
+    console.log("Tracks changed")
+  })
 };
 
 init();
@@ -40,21 +48,44 @@ export async function setSessionBoxOffset(track_offset: number, scene_offset: nu
     updateSessionBoxListeners();
 }
 
-
+let clipSlotListeners: Array<()=> Promise<any>> = [];
 async function updateSessionBoxListeners() {
-    console.log("We runing")
     const scenes = await ableton.song.get("scenes");
     scenes.forEach((scene, sceneIndex) => {
         scene.get("clip_slots").then(clip_slots => {
             clip_slots.forEach((clip_slot, clipSlotIndex) => {
-                clip_slot.get("color").then(color => {
-                    console.log(`Scene ${sceneIndex} at slot ${clipSlotIndex} has color ${color?.rgb}`)
-                })
+                if(activeRange(clipSlotIndex, sceneIndex)){
+                    clip_slot.addListener("has_clip", (has_clip) => {
+                        // based on has_clip, attach color change listener
+                        console.log(`Scene ${sceneIndex} at slot ${clipSlotIndex} CHANGED has_clip ${has_clip}`)
+                    })
+                    clip_slot.addListener("color", (color) => {
+                        console.log(`Scene ${sceneIndex} at slot ${clipSlotIndex} CHANGED color ${color?.hex}`)
+                    })
+                } else {
+
+                }
+                
+                // clip_slot.get("clip").then(clip => {
+                //     if(clip){
+                //         clip.get("color").then(color => {
+                //             console.log(`Scene ${sceneIndex} at slot ${clipSlotIndex} has color ${color?.hex}`)
+                //         })
+                //         clip.addListener("color", (color) => {
+                //             console.log(`Scene ${sceneIndex} at slot ${clipSlotIndex} CHANGED color ${color?.hex}`)
+                //         })
+                //     }
+                // })
             })
         })
     })
 }
 
+// 2, 3
+function activeRange(track_index: number, scene_index: number): boolean {
+    // to do.. based on the track_index and scene_index, return if it is within the range defined by SESSION_RING
+    return true
+}
 
 async function sessionScroll(dir: NavDirection) {
     await ableton.application.view
