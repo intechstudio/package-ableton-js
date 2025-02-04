@@ -1,74 +1,78 @@
-<svelte:options customElement={{ tag: "ableton-preference", shadow: "none" }} />
+<svelte:options
+  customElement={{ tag: "template-preference", shadow: "none" }}
+/>
 
 <script>
   import {
     Block,
     BlockBody,
-    BlockRow,
     BlockTitle,
-    MoltenButton,
-    MoltenInput,
+    MeltCheckbox,
+    MoltenButton
   } from "@intechstudio/grid-uikit";
+    import { Scene } from "ableton-js/ns/scene";
   import { onMount } from "svelte";
 
-  import "./app.css";
-
   // @ts-ignore
-  const messagePort = {}; // createPackageMessagePort("package-ableton-js");
+  const messagePort = createPackageMessagePort(
+    "package-ableton-js",
+    "preferences"
+  );
 
-  onMount(() => {
-    messagePort.start();
+  let myFirstVariable = false;
+
+  $: myFirstVariable, handleDataChange();
+
+  function handleDataChange() {
     messagePort.postMessage({
-      type: "request-configuration",
+      type: "set-setting",
+      myFirstVariable,
     });
-    return () => {
-      messagePort.close();
-    };
-  });
+  }
 
   function makeItGreen() {
     messagePort.postMessage({
-      type: "led-update",
-      data: {
-        color: "green",
-      },
+      type: "offset",
+      track_offset: 1,
+      scene_offset: 2
     });
   }
 
   function makeItRed() {
     messagePort.postMessage({
-      type: "scroll-up",
-      data: {
-        color: "red",
-      },
+      type: "offset",
+      track_offset: 2,
+      scene_offset: 2
     });
   }
 
-  const clipGrid = [
-    [0, 1, 3, 4],
-    [5, 6, 7, 8],
-    [9, 10, 11, 12],
-    [13, 14, 15, 16],
-  ];
+  onMount(() => {
+    messagePort.onmessage = (e) => {
+      const data = e.data;
+      if (data.type === "client-status") {
+        myFirstVariable = data.myFirstVariable;
+      }
+    };
+    messagePort.start();
+    return () => {
+      messagePort.close();
+    };
+  });
 </script>
 
 <main-app>
   <div class="px-4">
-    <div></div>
-    no
     <Block>
-      yes
-      {#each clipGrid as gridColumn, gridColumnIndex}
-        <div>Column {gridColumnIndex}</div>
-        {#each gridColumn as gridRow, gridRowIndex}
-          <div>{gridColumn} {gridRow}</div>
-        {/each}
-      {/each}
-      <BlockTitle>Ableton JS demo</BlockTitle>
-      <div class="flex flex-row">
+      <BlockTitle>Template Package</BlockTitle>
+      <BlockBody>
+        Test variable
+        <MeltCheckbox
+          title={"This is a persistent variable"}
+          bind:target={myFirstVariable}
+        />
         <MoltenButton title={"piros"} click={makeItRed} />
         <MoltenButton title={"zöld"} click={makeItGreen} />
-      </div>
+      </BlockBody>
     </Block>
   </div>
 </main-app>
