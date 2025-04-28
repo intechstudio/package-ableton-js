@@ -1,7 +1,5 @@
 {
-    "watch": [
-      "src"
-    ],
-    "ext": "ts",
-    "exec": "./node_modules/.bin/ts-node --transpiler sucrase/ts-node-plugin src/index.ts"
-  }
+  "watch": ["src"],
+  "ext": "ts",
+  "exec": "./node_modules/.bin/ts-node --transpiler sucrase/ts-node-plugin src/index.ts"
+}

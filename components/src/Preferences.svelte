@@ -8,15 +8,15 @@
     BlockBody,
     BlockTitle,
     MeltCheckbox,
-    MoltenButton
+    MoltenButton,
   } from "@intechstudio/grid-uikit";
-    import { Scene } from "ableton-js/ns/scene";
+  import { Scene } from "ableton-js/ns/scene";
   import { onMount } from "svelte";
 
   // @ts-ignore
   const messagePort = createPackageMessagePort(
     "package-ableton-js",
-    "preferences"
+    "preferences",
   );
 
   let myFirstVariable = false;
@@ -34,7 +34,7 @@
     messagePort.postMessage({
       type: "offset",
       track_offset: 1,
-      scene_offset: 2
+      scene_offset: 2,
     });
   }
 
@@ -42,7 +42,7 @@
     messagePort.postMessage({
       type: "offset",
       track_offset: 2,
-      scene_offset: 2
+      scene_offset: 2,
     });
   }
 

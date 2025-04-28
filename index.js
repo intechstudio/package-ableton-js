@@ -33,7 +33,6 @@ exports.loadPackage = async function (gridController, persistedData) {
   });
 
   myFirstVariable = persistedData?.myFirstVariable ?? false;
-
 };
 
 exports.unloadPackage = async function () {
@@ -56,9 +55,8 @@ exports.addMessagePort = async function (port, senderId) {
       preferenceMessagePort = undefined;
     });
     port.on("message", (e) => {
-      
       if (e.data.type === "offset") {
-        const {track_offset, scene_offset} = e.data;
+        const { track_offset, scene_offset } = e.data;
         ableton.setSessionBoxOffset(track_offset, scene_offset);
       }
 
@@ -77,10 +75,9 @@ exports.addMessagePort = async function (port, senderId) {
   }
 };
 
-function onMessage(msg){
+function onMessage(msg) {
   console.log("onMessage", msg);
 }
-
 
 async function sendImmediate(dx, dy, script) {
   controller.sendMessageToEditor({
