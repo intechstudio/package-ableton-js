@@ -27,7 +27,7 @@ function notifyEditorAfterBuildPlugin() {
               event: "components-build-complete",
               id: packageId,
               rootPath: path_1.default.resolve(__dirname, ".."),
-            }),
+            })
           );
           ws.close();
           clearTimeout(timeout);

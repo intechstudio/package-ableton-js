@@ -1,6 +1,9 @@
 import { Ableton } from "ableton-js";
 import { NavDirection } from "ableton-js/ns/application-view";
+import { ClipSlot } from "ableton-js/ns/clip-slot";
+import { MixerDevice } from "ableton-js/ns/mixer-device";
 import { Scene } from "ableton-js/ns/scene";
+import { Track } from "ableton-js/ns/track";
 
 // Log all messages to the console
 const ableton = new Ableton({ logger: console });
@@ -22,13 +25,14 @@ let SESSION_RING: SessionRing = {
 const init = async () => {
   await ableton.start();
   setupSessionBox(4, 4);
-
   ableton.song.addListener("scenes", (scenes) => {
     console.log("Scenes changed");
+    updateSessionBoxListeners();
   });
 
   ableton.song.addListener("tracks", (tracks) => {
     console.log("Tracks changed");
+    updateSessionBoxListeners();
   });
 };
 
@@ -43,7 +47,7 @@ export async function setupSessionBox(num_tracks: number, num_scenes: number) {
 
 export async function setSessionBoxOffset(
   track_offset: number,
-  scene_offset: number,
+  scene_offset: number
 ) {
   SESSION_RING.track_offset = track_offset;
   SESSION_RING.scene_offset = scene_offset;
@@ -51,106 +55,198 @@ export async function setSessionBoxOffset(
   updateSessionBoxListeners();
 }
 
+enum EVENT {
+  COLOR = "COLOR",
+  CLIP_EXISTS = "CLIP_EXISTS",
+  CLIP_TRIGGERING = "CLIP_TRIGGERING",
+  CLIP_PLAYING = "CLIP_PLAYING",
+  MIXER_VOLUME_RX = "MIXER_VOLUME_RX",
+  MIXER_VOLUME_TX = "MIXER_VOLUME_TX",
+  MIXER_PAN_RX = "MIXER_PAN_RX",
+  MIXER_PAN_TX = "MIXER_PAN_TX",
+  MIXER_SEND_TX = "MIXER_SEND_TX",
+  MIXER_SEND_RX = "MIXER_SEND_RX",
+  TRACK_ARM_TX = "TRACK_ARM_TX",
+  TRACK_ARM_RX = "TRACK_ARM_RX",
+  TRACK_SOLO_TX = "TRACK_SOLO_TX",
+  TRACK_SOLO_RX = "TRACK_SOLO_RX",
+  TRACK_MUTE_TX = "TRACK_MUTE_TX",
+  TrACK_MUTE_RX = "TRACK_MUTE_RX",
+}
+
 let clipSlotListeners: Array<() => Promise<any>> = [];
+let clipSlotPromises: any[] = [];
 async function updateSessionBoxListeners() {
   const scenes = await ableton.song.get("scenes");
+  const tracks = await ableton.song.get("tracks");
+  // this should be just a scenes split, based on scene offset.
   scenes.forEach((scene, sceneIndex) => {
+    // setup clip_slot listeneres to get updates on clip colors and clip launch states!
     scene.get("clip_slots").then((clip_slots) => {
       clip_slots.forEach((clip_slot, clipSlotIndex) => {
+        // check active range, this return true now, but could be mapped to SESSION track and offset
         if (activeRange(clipSlotIndex, sceneIndex)) {
+          // setup on init, all colors are dumped here!
+          clipColorListener(clip_slot, clipSlotIndex, sceneIndex);
+          // listen to clip changes (add / remove)
           clip_slot.addListener("has_clip", (has_clip) => {
-            // based on has_clip, attach color change listener
+            // call the color listener again, when the clip has been changed i.e. removed or added
+            clipColorListener(clip_slot, clipSlotIndex, sceneIndex);
             console.log(
-              `Scene ${sceneIndex} at slot ${clipSlotIndex} CHANGED has_clip ${has_clip}`,
+              `${EVENT.CLIP_EXISTS} Scene ${sceneIndex} at slot ${clipSlotIndex} CHANGED has_clip ${has_clip}`
             );
           });
-          clip_slot.addListener("color", (color) => {
-            console.log(
-              `Scene ${sceneIndex} at slot ${clipSlotIndex} CHANGED color ${color?.hex}`,
-            );
-          });
-        } else {
-        }
 
-        // clip_slot.get("clip").then(clip => {
-        //     if(clip){
-        //         clip.get("color").then(color => {
-        //             console.log(`Scene ${sceneIndex} at slot ${clipSlotIndex} has color ${color?.hex}`)
-        //         })
-        //         clip.addListener("color", (color) => {
-        //             console.log(`Scene ${sceneIndex} at slot ${clipSlotIndex} CHANGED color ${color?.hex}`)
-        //         })
-        //     }
-        // })
+          // get triggered change
+          clip_slot.addListener("is_triggered", async (bool: boolean) => {
+            console.log(EVENT.CLIP_TRIGGERING, bool);
+            // to check which clip is actually playing on a channel, we need to listen for that on tracks!
+          });
+        }
       });
     });
   });
-}
 
-// 2, 3
-function activeRange(track_index: number, scene_index: number): boolean {
-  // to do.. based on the track_index and scene_index, return if it is within the range defined by SESSION_RING
-  return true;
-}
-
-async function sessionScroll(dir: NavDirection) {
-  await ableton.application.view
-    .scrollView("Session", dir)
-    .then(() => {
-      currentBox();
-      currentScenes();
-    })
-    .catch((error) => {
-      console.warn(error);
+  tracks.forEach(async (track, trackIndex) => {
+    // used to check which clip is playing
+    track.addListener("playing_slot_index", (sceneIndex) => {
+      // this return "-2" when clips in channel stop playing
+      console.log(EVENT.CLIP_PLAYING, trackIndex, sceneIndex);
     });
+
+    // get the mixer device for each track and setup volume, pan listeners
+    const mixerDevice = await track.get("mixer_device");
+    mixerDeviceListener(mixerDevice, trackIndex);
+
+    // arm, mute, solo
+    trackListener(track, trackIndex);
+  });
+
+  setMixerDeviceVolume(1, Math.random());
+  setMixerDevicePan(1, Math.random() * 2 - 1);
+  setTrackProperty(0, "mute", true);
 }
 
-async function fireSelectedScene() {
-  await ableton.song.view
-    .get("selected_scene")
-    .then((scene) => scene.fire())
-    .catch((error) => {
-      console.warn(error);
+async function mixerDeviceListener(
+  mixerDevice: MixerDevice,
+  trackIndex: number
+) {
+  // channel fader
+  const fader = await mixerDevice.get("volume");
+  const initialFaderValue = await fader.get("value");
+  console.log(EVENT.MIXER_VOLUME_TX, trackIndex, initialFaderValue.toFixed(2));
+  fader.addListener("value", (data) => {
+    console.log(EVENT.MIXER_VOLUME_TX, trackIndex, data.toFixed(2));
+  });
+  // panning
+  const pan = await mixerDevice.get("panning");
+  const initialPanValue = await fader.get("value");
+  console.log(EVENT.MIXER_PAN_TX, trackIndex, initialPanValue.toFixed(2));
+  pan.addListener("value", (data) => {
+    console.log(EVENT.MIXER_PAN_TX, trackIndex, data.toFixed(2));
+  });
+  // sends
+  const sends = await mixerDevice.get("sends");
+  sends.forEach(async (send, sendIndex) => {
+    // ! I think we should limit this to certain number of sends, but it's ok as it is
+    const initialSendValue = await send.get("value");
+    console.log(
+      `${
+        EVENT.MIXER_SEND_TX
+      } track: ${trackIndex} send: ${sendIndex} ${initialSendValue.toFixed(2)}`
+    );
+    send.addListener("value", (data) => {
+      console.log(
+        `${
+          EVENT.MIXER_SEND_TX
+        } track: ${trackIndex} send: ${sendIndex} ${data.toFixed(2)}`
+      );
     });
-}
-
-async function getClipSlot(rowNumber, columnNumber) {
-  if (rowNumber == undefined || columnNumber == undefined) return;
-  return await ableton.song
-    .get("tracks")
-    .then((tracks) =>
-      tracks[columnNumber]
-        .get("clip_slots")
-        .then(async (clip_slots) => clip_slots[rowNumber]),
-    )
-    .catch((error) => {
-      console.warn(error);
-    });
-}
-
-async function listenForAddedOrDeletedScenes() {
-  ableton.song.addListener("scenes", async (scenes) => {
-    console.log("new scene");
   });
 }
 
-async function currentBox() {
-  const scenes = await ableton.song.get("scenes");
-  const selectedScene = await ableton.song.view.get("selected_scene");
-  const selectedSceneIndex = scenes.findIndex(
-    (scene) => scene.raw.id === selectedScene.raw.id,
-  );
-  clipListenerBox(scenes.slice(selectedSceneIndex, selectedSceneIndex + 4));
+function trackListener(track: Track, trackIndex: number) {
+  track.addListener("arm", (data) => {
+    console.log(EVENT.TRACK_ARM_TX, data, trackIndex);
+  });
+  track.addListener("solo", (data) => {
+    console.log(EVENT.TRACK_SOLO_TX, data, trackIndex);
+  });
+  track.addListener("mute", (data) => {
+    console.log(EVENT.TRACK_MUTE_TX, data, trackIndex);
+  });
 }
 
-async function currentScenes() {
-  const scenes = await ableton.song.get("scenes");
-  const selectedScene = await ableton.song.view.get("selected_scene");
-  const selectedSceneIndex = scenes.findIndex(
-    (scene) => scene.raw.id === selectedScene.raw.id,
-  );
-  // USED FOR IS TRIGGERED CHCEK!
-  sceneListener(scenes.slice(selectedSceneIndex, selectedSceneIndex + 4));
+// set arm, mute or solo
+async function setTrackProperty(
+  trackIndex,
+  property: "arm" | "mute" | "solo",
+  value: boolean
+) {
+  await ableton.song
+    .get("tracks")
+    .then((tracks) => tracks[trackIndex])
+    .then((track) => track.set(property, value));
+}
+
+// change volume of a channel
+async function setMixerDeviceVolume(trackIndex, volume) {
+  console.log(EVENT.MIXER_VOLUME_RX, trackIndex, volume);
+  if (!(volume <= 1 && volume >= 0)) return;
+  await ableton.song
+    .get("tracks")
+    .then((tracks) => tracks[trackIndex])
+    .then((track) => track.get("mixer_device"))
+    .then((md) => md.get("volume"))
+    .then((v) => v.set("value", volume));
+}
+
+// change pan on channel
+async function setMixerDevicePan(trackIndex, pan) {
+  console.log(EVENT.MIXER_PAN_RX, trackIndex, pan);
+  if (!(pan <= 1 && pan >= -1)) return;
+  await ableton.song
+    .get("tracks")
+    .then((tracks) => tracks[trackIndex])
+    .then((track) => track.get("mixer_device"))
+    .then((md) => md.get("panning"))
+    .then((v) => v.set("value", pan));
+}
+
+async function clipColorListener(
+  clip_slot: ClipSlot,
+  track: number,
+  scene: number
+) {
+  clip_slot
+    .get("clip")
+    .then((clip) => {
+      if (clip) {
+        clip.addListener("color", (color) => {
+          console.log(EVENT.COLOR, track, scene, color.rgb);
+        });
+        return clip
+          .get("color")
+          .then((color) => {
+            console.log(EVENT.COLOR, track, scene, color.rgb);
+            return { track, scene, color: color.rgb };
+          })
+          .catch((error) => {
+            console.error(EVENT.COLOR, "An error occurred:", error);
+            return { track, scene, color: "000000" };
+          });
+      } else {
+        console.log(EVENT.COLOR, track, scene, { r: 0, g: 0, b: 0 });
+        return new Promise((res, rej) => {
+          res({ track, scene, color: "000000" });
+          rej({ track, scene, color: "000000" });
+        });
+      }
+    })
+    .catch((error) => {
+      console.error("An error occurred:", error);
+      return { track, scene, color: "000000" };
+    });
 }
 
 let activeSceneSubscribtions: Array<() => Promise<boolean | undefined>> = [];
@@ -166,8 +262,8 @@ async function sceneListener(scenes: Scene[]) {
         async (bool: boolean) => {
           // lookup or other method should be used, previously based on lookuptable BUTTONS
           const led = row;
-          setGridLedAnimation(led, bool, false);
-        },
+          console.log("setGridLedColor", led, bool, false);
+        }
       );
 
       activeSceneSubscribtions.push(sceneListener);
@@ -186,122 +282,39 @@ async function sceneListener(scenes: Scene[]) {
   }
 }
 
-let activeClipSubscribtions: Array<() => Promise<boolean | undefined>> = [];
-async function clipListenerBox(scenes: Scene[]) {
-  try {
-    // cleanup subscribers
-    await Promise.all(activeClipSubscribtions.map((sub) => sub()));
-
-    activeClipSubscribtions = [];
-
-    // promises are in 2D array, rows are scenes, columns are tracks
-    // getting here all the clip colors to immediately update them on Grid
-    const promises = scenes.map((scene, row) => {
-      return scene.get("clip_slots").then(async (clip_slots) => {
-        const clipSlotPromises: Array<Promise<any>> = [];
-        for (let col = 0; col < 4; col++) {
-          const clip_slot = clip_slots[col];
-
-          // Collect promises for each clip_slot
-          const clipPromise = clip_slot
-            .get("clip")
-            .then((clip) => {
-              if (clip) {
-                return clip
-                  .get("color")
-                  .then((color) => {
-                    return { row, col, color: color.rgb };
-                  })
-                  .catch((error) => {
-                    console.error("An error occurred:", error);
-                    return { row, col, color: "000000" };
-                  });
-              } else {
-                return new Promise((res, rej) => {
-                  res({ row, col, color: "000000" });
-                  rej({ row, col, color: "000000" });
-                });
-              }
-            })
-            .catch((error) => {
-              console.error("An error occurred:", error);
-              return { row, col, color: "000000" };
-            });
-
-          clipSlotPromises.push(clipPromise as Promise<any>);
-
-          // Collect subscription promises
-          const subscriberPromise = await clip_slot.addListener(
-            "is_triggered",
-            async (bool: boolean) => {
-              const led = { index: 3 };
-              setGridLedAnimation(led, bool, clip_slot.raw.has_clip);
-            },
-          );
-
-          activeClipSubscribtions.push(subscriberPromise);
-        }
-        return Promise.all(clipSlotPromises); // Wait for all clip_slot promises to complete
-      });
-    });
-
-    // wait for all scene promises to complete
-    const clipMatrix = await Promise.all(promises).catch((error) => {
-      console.error("An error occurred:", error);
-    });
-
-    multiSetGridLedColor(clipMatrix);
-  } catch (error) {
-    console.warn(error);
-  }
+// 2, 3
+function activeRange(track_index: number, scene_index: number): boolean {
+  // to do.. based on the track_index and scene_index, return if it is within the range defined by SESSION_RING
+  return true;
 }
 
-async function multiSetGridLedColor(clipMatix) {
-  let script = "";
-
-  try {
-    clipMatix.forEach((scene) => {
-      scene.forEach((clip) => {
-        const { row, col, color } = clip;
-        // BUTTON_ARRAY[row][col];
-        const BUTTON = row * col;
-        const rgb = hexToRgb(color);
-
-        script += ` glc(${0},1,${rgb[0]},${rgb[1]},${rgb[2]})`;
-        if (color !== "000000") {
-          script += ` glp(${0},1,50) `;
-        }
-      });
+async function fireSelectedScene() {
+  await ableton.song.view
+    .get("selected_scene")
+    .then((scene) => scene.fire())
+    .catch((error) => {
+      console.warn(error);
     });
-
-    console.log(script);
-
-    //sendImmediate(0, -1, script);
-  } catch (error) {
-    console.warn(error);
-  }
 }
 
-function setGridLedAnimation(led, isTriggered, hasClip) {
-  try {
-    const BUTTON = { index: 1 };
+async function getClipSlot(rowNumber, columnNumber) {
+  if (rowNumber == undefined || columnNumber == undefined) return;
+  return await ableton.song
+    .get("tracks")
+    .then((tracks) =>
+      tracks[columnNumber]
+        .get("clip_slots")
+        .then(async (clip_slots) => clip_slots[rowNumber])
+    )
+    .catch((error) => {
+      console.warn(error);
+    });
+}
 
-    let script = "";
-    if (isTriggered == true) {
-      // start animation
-      script = `glpfs(${BUTTON.index},1,0,4,1)`;
-    } else if (isTriggered == false && hasClip == true) {
-      // stop animation and set brightness if clip exists
-      script = `glpfs(${BUTTON.index},1,0,0,0) glp(${BUTTON.index},1,255)`;
-    } else {
-      // stop animation
-      script = `glpfs(${BUTTON.index},1,0,0,0)`;
-    }
-
-    //sendImmediate(BUTTON.dx, BUTTON.dy, script);
-  } catch (error) {
-    console.warn(error);
-  }
+async function listenForAddedOrDeletedScenes() {
+  ableton.song.addListener("scenes", async (scenes) => {
+    console.log("new scene");
+  });
 }
 
 async function launchClip(rowNumber: number, columnNumber: number) {
@@ -325,62 +338,4 @@ function hexToRgb(hex) {
   var g = (bigint >> 8) & 255;
   var b = bigint & 255;
   return [r, g, b];
-}
-
-async function setGridLedColor(row, col, color) {
-  try {
-    const BUTTON = { index: 2 };
-    const rgb = hexToRgb(color);
-    const ledColorScript = `glc(${BUTTON.index},1,${rgb[0]},${rgb[1]},${rgb[2]})`;
-    //sendImmediate(BUTTON.dx, BUTTON.dy, ledColorScript);
-    console.log("setGridLedColor", row, col, rgb);
-  } catch (error) {
-    console.warn(error);
-  }
-}
-
-async function setGridLedStatus(row, col, clip_slot) {
-  if (!clip_slot) return;
-
-  try {
-    const BUTTON = { index: 0 };
-
-    let ledAnimationScript = "";
-    if (clip_slot.raw.is_triggered == true) {
-      // start animation
-      ledAnimationScript = `glpfs(${BUTTON.index},1,0,4,1)`;
-    } else {
-      // stop animation
-      ledAnimationScript = `glpfs(${BUTTON.index},1,0,0,0)`;
-    }
-
-    //sendImmediate(BUTTON.dx, BUTTON.dy, ledAnimationScript);
-
-    let intensity = 0;
-
-    if (clip_slot.raw.is_playing == true) {
-      intensity = 255;
-    } else {
-      intensity = 0;
-    }
-
-    let ledIntensityScript = `glp(${BUTTON.index},1,${intensity}) `;
-
-    //sendImmediate(BUTTON.dx, BUTTON.dy, ledIntensityScript);
-  } catch (error) {
-    console.warn(error);
-  }
-}
-
-async function setGridLedIntensity(row, col, intensity = 0) {
-  try {
-    //BUTTON_ARRAY[row][col];
-    const BUTTON = 0;
-
-    let ledIntensityScript = `glp(${0},1,${intensity}) `;
-
-    //sendImmediate(BUTTON.dx, BUTTON.dy, ledIntensityScript);
-  } catch (error) {
-    console.warn(error);
-  }
 }
