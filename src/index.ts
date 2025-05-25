@@ -34,6 +34,8 @@ const init = async () => {
     console.log("Tracks changed");
     updateSessionBoxListeners();
   });
+
+  selectionListener();
 };
 
 init();
@@ -71,7 +73,33 @@ enum EVENT {
   TRACK_SOLO_TX = "TRACK_SOLO_TX",
   TRACK_SOLO_RX = "TRACK_SOLO_RX",
   TRACK_MUTE_TX = "TRACK_MUTE_TX",
-  TrACK_MUTE_RX = "TRACK_MUTE_RX",
+  TRACK_MUTE_RX = "TRACK_MUTE_RX",
+  TRACK_VIEW_SELECTED_DEVICE_TX = "TRACK_VIEW_SELECTED_DEVICE_TX",
+  VIEW_PARAMETER_RX = "VIEW_PARAMETER_RX",
+  VIEW_PARAMETER_TX = "VIEW_PARAMETER_TX",
+  VIEW_TRACK_RX = "VIEW_TRACK_RX",
+  VIEW_TRACK_TX = "VIEW_TRACK_TX"
+}
+
+async function selectionListener() {
+  ableton.song.view.addListener("selected_parameter", async (parameter) => {
+    if(parameter){
+      const [min, max] = await Promise.all([parameter.get("min"), parameter.get("max")])
+      console.log(EVENT.VIEW_PARAMETER_RX, parameter.raw.name, parameter.raw.value, min, max)
+    } else {
+      console.log(EVENT.VIEW_PARAMETER_RX, null)
+    }
+  })
+
+  ableton.song.view.addListener("selected_track", async (track)=> {
+    if(track){
+      const value = await track.get("mixer_device").then(md => md.get("volume")).then(v => v.raw.value.toFixed(2))
+      console.log(`${EVENT.VIEW_TRACK_RX} ${track.raw.name}, color: ${hexToRgb(track.raw.color)} solo: ${track.raw.solo}, mute: ${track.raw.mute}, volume: ${value}`)
+    } else {
+      console.log(EVENT.VIEW_TRACK_RX, null)
+    }
+  })
+
 }
 
 let clipSlotListeners: Array<() => Promise<any>> = [];
@@ -114,12 +142,18 @@ async function updateSessionBoxListeners() {
       console.log(EVENT.CLIP_PLAYING, trackIndex, sceneIndex);
     });
 
+    
+
     // get the mixer device for each track and setup volume, pan listeners
     const mixerDevice = await track.get("mixer_device");
     mixerDeviceListener(mixerDevice, trackIndex);
 
     // arm, mute, solo
     trackListener(track, trackIndex);
+
+    // selected device
+    selectedDeviceListener(track, trackIndex)
+    
   });
 
   setMixerDeviceVolume(1, Math.random());
@@ -175,6 +209,12 @@ function trackListener(track: Track, trackIndex: number) {
   track.addListener("mute", (data) => {
     console.log(EVENT.TRACK_MUTE_TX, data, trackIndex);
   });
+}
+
+function selectedDeviceListener(track: Track, trackIndex: number) {
+  track.view.addListener("selected_device", (device) => {
+      console.log(EVENT.TRACK_VIEW_SELECTED_DEVICE_TX, device.raw.class_name, trackIndex)
+  })
 }
 
 // set arm, mute or solo
