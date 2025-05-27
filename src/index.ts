@@ -142,8 +142,7 @@ async function updateSessionBoxListeners() {
       console.log(EVENT.CLIP_PLAYING, trackIndex, sceneIndex);
     });
 
-    
-
+  
     // get the mixer device for each track and setup volume, pan listeners
     const mixerDevice = await track.get("mixer_device");
     mixerDeviceListener(mixerDevice, trackIndex);
