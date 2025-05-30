@@ -16,7 +16,7 @@
   // @ts-ignore
   const messagePort = createPackageMessagePort(
     "package-ableton-js",
-    "preferences"
+    "preferences",
   );
 
   let myFirstVariable = false;

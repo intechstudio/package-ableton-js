@@ -22,23 +22,36 @@ let SESSION_RING: SessionRing = {
   track_offset: 0,
 };
 
-const init = async () => {
+let unsubList: (() => Promise<boolean | undefined>)[] = [];
+
+let sendMessageToModule: (args: any[]) => void = () => {};
+
+export async function init(sendMessage) {
   await ableton.start();
   setupSessionBox(4, 4);
-  ableton.song.addListener("scenes", (scenes) => {
-    console.log("Scenes changed");
-    updateSessionBoxListeners();
-  });
+  unsubList.push(
+    await ableton.song.addListener("scenes", (scenes) => {
+      console.log("Scenes changed");
+      updateSessionBoxListeners();
+    }),
+  );
 
-  ableton.song.addListener("tracks", (tracks) => {
-    console.log("Tracks changed");
-    updateSessionBoxListeners();
-  });
+  unsubList.push(
+    await ableton.song.addListener("tracks", (tracks) => {
+      console.log("Tracks changed");
+      updateSessionBoxListeners();
+    }),
+  );
 
   selectionListener();
-};
 
-init();
+  sendMessageToModule = sendMessage;
+}
+
+export async function close() {
+  await ableton.close();
+  unsubList.forEach((e) => e());
+}
 
 export async function setupSessionBox(num_tracks: number, num_scenes: number) {
   SESSION_RING.tracks = num_tracks;
@@ -49,7 +62,7 @@ export async function setupSessionBox(num_tracks: number, num_scenes: number) {
 
 export async function setSessionBoxOffset(
   track_offset: number,
-  scene_offset: number
+  scene_offset: number,
 ) {
   SESSION_RING.track_offset = track_offset;
   SESSION_RING.scene_offset = scene_offset;
@@ -78,28 +91,49 @@ enum EVENT {
   VIEW_PARAMETER_RX = "VIEW_PARAMETER_RX",
   VIEW_PARAMETER_TX = "VIEW_PARAMETER_TX",
   VIEW_TRACK_RX = "VIEW_TRACK_RX",
-  VIEW_TRACK_TX = "VIEW_TRACK_TX"
+  VIEW_TRACK_TX = "VIEW_TRACK_TX",
 }
 
 async function selectionListener() {
-  ableton.song.view.addListener("selected_parameter", async (parameter) => {
-    if(parameter){
-      const [min, max] = await Promise.all([parameter.get("min"), parameter.get("max")])
-      console.log(EVENT.VIEW_PARAMETER_RX, parameter.raw.name, parameter.raw.value, min, max)
-    } else {
-      console.log(EVENT.VIEW_PARAMETER_RX, null)
-    }
-  })
+  unsubList.push(
+    await ableton.song.view.addListener(
+      "selected_parameter",
+      async (parameter) => {
+        if (parameter) {
+          const [min, max] = await Promise.all([
+            parameter.get("min"),
+            parameter.get("max"),
+          ]);
+          console.log(
+            EVENT.VIEW_PARAMETER_RX,
+            parameter.raw.name,
+            parameter.raw.value,
+            min,
+            max,
+          );
+        } else {
+          console.log(EVENT.VIEW_PARAMETER_RX, null);
+        }
+      },
+    ),
+  );
 
-  ableton.song.view.addListener("selected_track", async (track)=> {
-    if(track){
-      const value = await track.get("mixer_device").then(md => md.get("volume")).then(v => v.raw.value.toFixed(2))
-      console.log(`${EVENT.VIEW_TRACK_RX} ${track.raw.name}, color: ${hexToRgb(track.raw.color)} solo: ${track.raw.solo}, mute: ${track.raw.mute}, volume: ${value}`)
-    } else {
-      console.log(EVENT.VIEW_TRACK_RX, null)
-    }
-  })
-
+  unsubList.push(
+    await ableton.song.view.addListener("selected_track", async (track) => {
+      if (track) {
+        const value = await track
+          .get("mixer_device")
+          .then((md) => md.get("volume"))
+          .then((v) => v.raw.value.toFixed(2));
+        sendMessageToModule([EVENT.VIEW_TRACK_RX, hexToRgb(track.raw.color)]);
+        console.log(
+          `${EVENT.VIEW_TRACK_RX} ${track.raw.name}, color: ${hexToRgb(track.raw.color)} solo: ${track.raw.solo}, mute: ${track.raw.mute}, volume: ${value}`,
+        );
+      } else {
+        console.log(EVENT.VIEW_TRACK_RX, null);
+      }
+    }),
+  );
 }
 
 let clipSlotListeners: Array<() => Promise<any>> = [];
@@ -111,25 +145,32 @@ async function updateSessionBoxListeners() {
   scenes.forEach((scene, sceneIndex) => {
     // setup clip_slot listeneres to get updates on clip colors and clip launch states!
     scene.get("clip_slots").then((clip_slots) => {
-      clip_slots.forEach((clip_slot, clipSlotIndex) => {
+      clip_slots.forEach(async (clip_slot, clipSlotIndex) => {
         // check active range, this return true now, but could be mapped to SESSION track and offset
         if (activeRange(clipSlotIndex, sceneIndex)) {
           // setup on init, all colors are dumped here!
           clipColorListener(clip_slot, clipSlotIndex, sceneIndex);
           // listen to clip changes (add / remove)
-          clip_slot.addListener("has_clip", (has_clip) => {
-            // call the color listener again, when the clip has been changed i.e. removed or added
-            clipColorListener(clip_slot, clipSlotIndex, sceneIndex);
-            console.log(
-              `${EVENT.CLIP_EXISTS} Scene ${sceneIndex} at slot ${clipSlotIndex} CHANGED has_clip ${has_clip}`
-            );
-          });
+          unsubList.push(
+            await clip_slot.addListener("has_clip", (has_clip) => {
+              // call the color listener again, when the clip has been changed i.e. removed or added
+              clipColorListener(clip_slot, clipSlotIndex, sceneIndex);
+              console.log(
+                `${EVENT.CLIP_EXISTS} Scene ${sceneIndex} at slot ${clipSlotIndex} CHANGED has_clip ${has_clip}`,
+              );
+            }),
+          );
 
           // get triggered change
-          clip_slot.addListener("is_triggered", async (bool: boolean) => {
-            console.log(EVENT.CLIP_TRIGGERING, bool);
-            // to check which clip is actually playing on a channel, we need to listen for that on tracks!
-          });
+          unsubList.push(
+            await clip_slot.addListener(
+              "is_triggered",
+              async (bool: boolean) => {
+                console.log(EVENT.CLIP_TRIGGERING, bool);
+                // to check which clip is actually playing on a channel, we need to listen for that on tracks!
+              },
+            ),
+          );
         }
       });
     });
@@ -137,12 +178,13 @@ async function updateSessionBoxListeners() {
 
   tracks.forEach(async (track, trackIndex) => {
     // used to check which clip is playing
-    track.addListener("playing_slot_index", (sceneIndex) => {
-      // this return "-2" when clips in channel stop playing
-      console.log(EVENT.CLIP_PLAYING, trackIndex, sceneIndex);
-    });
+    unsubList.push(
+      await track.addListener("playing_slot_index", (sceneIndex) => {
+        // this return "-2" when clips in channel stop playing
+        console.log(EVENT.CLIP_PLAYING, trackIndex, sceneIndex);
+      }),
+    );
 
-  
     // get the mixer device for each track and setup volume, pan listeners
     const mixerDevice = await track.get("mixer_device");
     mixerDeviceListener(mixerDevice, trackIndex);
@@ -151,8 +193,7 @@ async function updateSessionBoxListeners() {
     trackListener(track, trackIndex);
 
     // selected device
-    selectedDeviceListener(track, trackIndex)
-    
+    selectedDeviceListener(track, trackIndex);
   });
 
   setMixerDeviceVolume(1, Math.random());
@@ -162,22 +203,26 @@ async function updateSessionBoxListeners() {
 
 async function mixerDeviceListener(
   mixerDevice: MixerDevice,
-  trackIndex: number
+  trackIndex: number,
 ) {
   // channel fader
   const fader = await mixerDevice.get("volume");
   const initialFaderValue = await fader.get("value");
   console.log(EVENT.MIXER_VOLUME_TX, trackIndex, initialFaderValue.toFixed(2));
-  fader.addListener("value", (data) => {
-    console.log(EVENT.MIXER_VOLUME_TX, trackIndex, data.toFixed(2));
-  });
+  unsubList.push(
+    await fader.addListener("value", (data) => {
+      console.log(EVENT.MIXER_VOLUME_TX, trackIndex, data.toFixed(2));
+    }),
+  );
   // panning
   const pan = await mixerDevice.get("panning");
   const initialPanValue = await fader.get("value");
   console.log(EVENT.MIXER_PAN_TX, trackIndex, initialPanValue.toFixed(2));
-  pan.addListener("value", (data) => {
-    console.log(EVENT.MIXER_PAN_TX, trackIndex, data.toFixed(2));
-  });
+  unsubList.push(
+    await pan.addListener("value", (data) => {
+      console.log(EVENT.MIXER_PAN_TX, trackIndex, data.toFixed(2));
+    }),
+  );
   // sends
   const sends = await mixerDevice.get("sends");
   sends.forEach(async (send, sendIndex) => {
@@ -186,41 +231,55 @@ async function mixerDeviceListener(
     console.log(
       `${
         EVENT.MIXER_SEND_TX
-      } track: ${trackIndex} send: ${sendIndex} ${initialSendValue.toFixed(2)}`
+      } track: ${trackIndex} send: ${sendIndex} ${initialSendValue.toFixed(2)}`,
     );
-    send.addListener("value", (data) => {
+    unsubList.push(
+      await send.addListener("value", (data) => {
+        console.log(
+          `${
+            EVENT.MIXER_SEND_TX
+          } track: ${trackIndex} send: ${sendIndex} ${data.toFixed(2)}`,
+        );
+      }),
+    );
+  });
+}
+
+async function trackListener(track: Track, trackIndex: number) {
+  unsubList.push(
+    await track.addListener("arm", (data) => {
+      console.log(EVENT.TRACK_ARM_TX, data, trackIndex);
+    }),
+  );
+  unsubList.push(
+    await track.addListener("solo", (data) => {
+      console.log(EVENT.TRACK_SOLO_TX, data, trackIndex);
+    }),
+  );
+  unsubList.push(
+    await track.addListener("mute", (data) => {
+      console.log(EVENT.TRACK_MUTE_TX, data, trackIndex);
+    }),
+  );
+}
+
+async function selectedDeviceListener(track: Track, trackIndex: number) {
+  unsubList.push(
+    await track.view.addListener("selected_device", (device) => {
       console.log(
-        `${
-          EVENT.MIXER_SEND_TX
-        } track: ${trackIndex} send: ${sendIndex} ${data.toFixed(2)}`
+        EVENT.TRACK_VIEW_SELECTED_DEVICE_TX,
+        device.raw.class_name,
+        trackIndex,
       );
-    });
-  });
-}
-
-function trackListener(track: Track, trackIndex: number) {
-  track.addListener("arm", (data) => {
-    console.log(EVENT.TRACK_ARM_TX, data, trackIndex);
-  });
-  track.addListener("solo", (data) => {
-    console.log(EVENT.TRACK_SOLO_TX, data, trackIndex);
-  });
-  track.addListener("mute", (data) => {
-    console.log(EVENT.TRACK_MUTE_TX, data, trackIndex);
-  });
-}
-
-function selectedDeviceListener(track: Track, trackIndex: number) {
-  track.view.addListener("selected_device", (device) => {
-      console.log(EVENT.TRACK_VIEW_SELECTED_DEVICE_TX, device.raw.class_name, trackIndex)
-  })
+    }),
+  );
 }
 
 // set arm, mute or solo
 async function setTrackProperty(
   trackIndex,
   property: "arm" | "mute" | "solo",
-  value: boolean
+  value: boolean,
 ) {
   await ableton.song
     .get("tracks")
@@ -255,15 +314,17 @@ async function setMixerDevicePan(trackIndex, pan) {
 async function clipColorListener(
   clip_slot: ClipSlot,
   track: number,
-  scene: number
+  scene: number,
 ) {
   clip_slot
     .get("clip")
-    .then((clip) => {
+    .then(async (clip) => {
       if (clip) {
-        clip.addListener("color", (color) => {
-          console.log(EVENT.COLOR, track, scene, color.rgb);
-        });
+        unsubList.push(
+          await clip.addListener("color", (color) => {
+            console.log(EVENT.COLOR, track, scene, color.rgb);
+          }),
+        );
         return clip
           .get("color")
           .then((color) => {
@@ -302,7 +363,7 @@ async function sceneListener(scenes: Scene[]) {
           // lookup or other method should be used, previously based on lookuptable BUTTONS
           const led = row;
           console.log("setGridLedColor", led, bool, false);
-        }
+        },
       );
 
       activeSceneSubscribtions.push(sceneListener);
@@ -343,7 +404,7 @@ async function getClipSlot(rowNumber, columnNumber) {
     .then((tracks) =>
       tracks[columnNumber]
         .get("clip_slots")
-        .then(async (clip_slots) => clip_slots[rowNumber])
+        .then(async (clip_slots) => clip_slots[rowNumber]),
     )
     .catch((error) => {
       console.warn(error);
@@ -351,9 +412,11 @@ async function getClipSlot(rowNumber, columnNumber) {
 }
 
 async function listenForAddedOrDeletedScenes() {
-  ableton.song.addListener("scenes", async (scenes) => {
-    console.log("new scene");
-  });
+  unsubList.push(
+    await ableton.song.addListener("scenes", async (scenes) => {
+      console.log("new scene");
+    }),
+  );
 }
 
 async function launchClip(rowNumber: number, columnNumber: number) {

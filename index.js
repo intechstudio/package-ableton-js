@@ -33,6 +33,13 @@ exports.loadPackage = async function (gridController, persistedData) {
   });
 
   myFirstVariable = persistedData?.myFirstVariable ?? false;
+
+  ableton.init((args) => {
+    gridController.sendMessageToEditor({
+      type: "execute-lua-script",
+      script: `ableton_js_callback({${args.join()}})`,
+    });
+  });
 };
 
 exports.unloadPackage = async function () {
@@ -45,6 +52,7 @@ exports.unloadPackage = async function () {
   messagePorts.clear();
   windowMessagePort?.close();
   windowMessagePort = undefined;
+  ableton.close();
 };
 
 exports.addMessagePort = async function (port, senderId) {
