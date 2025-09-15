@@ -24,7 +24,7 @@ let SESSION_RING: SessionRing = {
 
 let unsubList: (() => Promise<boolean | undefined>)[] = [];
 
-let sendMessageToModule: (args: any[]) => void = () => {};
+let sendMessageToModule: (args: any[] | {[key: string]: any}) => void = () => {};
 
 export async function init(sendMessage) {
   await ableton.start();
@@ -104,6 +104,13 @@ async function selectionListener() {
             parameter.get("min"),
             parameter.get("max"),
           ]);
+          sendMessageToModule({
+            evt: EVENT.VIEW_PARAMETER_RX,
+            n: parameter.raw.name,
+            v: parameter.raw.value,
+            min: min,
+            max: max
+          });
           console.log(
             EVENT.VIEW_PARAMETER_RX,
             parameter.raw.name,
@@ -125,7 +132,10 @@ async function selectionListener() {
           .get("mixer_device")
           .then((md) => md.get("volume"))
           .then((v) => v.raw.value.toFixed(2));
-        sendMessageToModule([EVENT.VIEW_TRACK_RX, hexToRgb(track.raw.color)]);
+        sendMessageToModule({
+          evt: EVENT.VIEW_TRACK_RX,
+          c: hexToRgb(track.raw.color)
+        });
         console.log(
           `${EVENT.VIEW_TRACK_RX} ${track.raw.name}, color: ${hexToRgb(track.raw.color)} solo: ${track.raw.solo}, mute: ${track.raw.mute}, volume: ${value}`,
         );
@@ -136,8 +146,6 @@ async function selectionListener() {
   );
 }
 
-let clipSlotListeners: Array<() => Promise<any>> = [];
-let clipSlotPromises: any[] = [];
 async function updateSessionBoxListeners() {
   const scenes = await ableton.song.get("scenes");
   const tracks = await ableton.song.get("tracks");

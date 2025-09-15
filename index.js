@@ -27,8 +27,8 @@ exports.loadPackage = async function (gridController, persistedData) {
       toggleable: true,
       short: "xta",
       displayName: "Template Action",
-      defaultLua: 'gps("package-svelte-template", val)',
-      actionComponent: "template-action",
+      defaultLua: 'gps("package-ableton-js", val)',
+      actionComponent: "ableton-js-action",
     },
   });
 
@@ -37,7 +37,7 @@ exports.loadPackage = async function (gridController, persistedData) {
   ableton.init((args) => {
     gridController.sendMessageToEditor({
       type: "execute-lua-script",
-      script: `ableton_js_callback({${args.join()}})`,
+      script: `ableton_js_callback(${JSON.stringify(args)})`,
     });
   });
 };

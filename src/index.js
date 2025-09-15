@@ -90,7 +90,17 @@ function selectionListener() {
     return __awaiter(this, void 0, void 0, function* () {
         unsubList.push(yield ableton.song.view.addListener("selected_parameter", (parameter) => __awaiter(this, void 0, void 0, function* () {
             if (parameter) {
-                const [min, max] = yield Promise.all([parameter.get("min"), parameter.get("max")]);
+                const [min, max] = yield Promise.all([
+                    parameter.get("min"),
+                    parameter.get("max"),
+                ]);
+                sendMessageToModule({
+                    evt: EVENT.VIEW_PARAMETER_RX,
+                    n: parameter.raw.name,
+                    v: parameter.raw.value,
+                    min: min,
+                    max: max
+                });
                 console.log(EVENT.VIEW_PARAMETER_RX, parameter.raw.name, parameter.raw.value, min, max);
             }
             else {
@@ -99,8 +109,14 @@ function selectionListener() {
         })));
         unsubList.push(yield ableton.song.view.addListener("selected_track", (track) => __awaiter(this, void 0, void 0, function* () {
             if (track) {
-                const value = yield track.get("mixer_device").then(md => md.get("volume")).then(v => v.raw.value.toFixed(2));
-                sendMessageToModule([EVENT.VIEW_TRACK_RX, hexToRgb(track.raw.color)]);
+                const value = yield track
+                    .get("mixer_device")
+                    .then((md) => md.get("volume"))
+                    .then((v) => v.raw.value.toFixed(2));
+                sendMessageToModule({
+                    evt: EVENT.VIEW_TRACK_RX,
+                    c: hexToRgb(track.raw.color)
+                });
                 console.log(`${EVENT.VIEW_TRACK_RX} ${track.raw.name}, color: ${hexToRgb(track.raw.color)} solo: ${track.raw.solo}, mute: ${track.raw.mute}, volume: ${value}`);
             }
             else {
@@ -109,8 +125,6 @@ function selectionListener() {
         })));
     });
 }
-let clipSlotListeners = [];
-let clipSlotPromises = [];
 function updateSessionBoxListeners() {
     return __awaiter(this, void 0, void 0, function* () {
         const scenes = yield ableton.song.get("scenes");

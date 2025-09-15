@@ -1,5 +1,5 @@
 <svelte:options
-  customElement={{ tag: "template-preference", shadow: "none" }}
+  customElement={{ tag: "ableton-js-preferences", shadow: "none" }}
 />
 
 <script>
@@ -63,7 +63,7 @@
 <main-app>
   <div class="px-4">
     <Block>
-      <BlockTitle>Template Package</BlockTitle>
+      <BlockTitle>AbletonJS Package</BlockTitle>
       <BlockBody>
         Test variable
         <MeltCheckbox

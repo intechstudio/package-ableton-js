@@ -1,4 +1,4 @@
-<svelte:options customElement={{ tag: "template-action", shadow: "none" }} />
+<svelte:options customElement={{ tag: "ableton-js-action", shadow: "none" }} />
 
 <script>
   import { MeltCombo } from "@intechstudio/grid-uikit";
@@ -9,7 +9,7 @@
   let isInitialized = false;
 
   function handleConfigUpdate(config) {
-    const regex = /^gps\("package-svelte-template", *(.*?)\)$/;
+    const regex = /^gps\("package-ableton-js", *(.*?)\)$/;
     if (currentCodeValue != config.script) {
       currentCodeValue = config.script;
       const match = config.script.match(regex);
@@ -31,7 +31,7 @@
   $: parameterCode,
     isInitialized &&
       (function () {
-        var code = `gps("package-svelte-template", ${parameterCode})`;
+        var code = `gps("package-ableton-js", ${parameterCode})`;
         if (currentCodeValue != code) {
           currentCodeValue = code;
           const event = new CustomEvent("updateCode", {
