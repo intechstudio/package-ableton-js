@@ -1,6 +1,8 @@
 import { Ableton } from "ableton-js";
 import { NavDirection } from "ableton-js/ns/application-view";
 import { ClipSlot } from "ableton-js/ns/clip-slot";
+import { Device } from "ableton-js/ns/device";
+import { DeviceParameter } from "ableton-js/ns/device-parameter";
 import { MixerDevice } from "ableton-js/ns/mixer-device";
 import { Scene } from "ableton-js/ns/scene";
 import { Track } from "ableton-js/ns/track";
@@ -94,6 +96,10 @@ enum EVENT {
   VIEW_TRACK_TX = "VIEW_TRACK_TX",
 }
 
+let selectedTrack: Track | undefined = undefined;
+let selectedTrackMixerDevice: MixerDevice | undefined = undefined;
+let selectedParameter: {parameter: DeviceParameter, min: number, max: number} | undefined = undefined;
+
 async function selectionListener() {
   unsubList.push(
     await ableton.song.view.addListener(
@@ -104,6 +110,11 @@ async function selectionListener() {
             parameter.get("min"),
             parameter.get("max"),
           ]);
+          selectedParameter = {
+            parameter,
+            min,
+            max
+          }
           sendMessageToModule({
             evt: EVENT.VIEW_PARAMETER_RX,
             n: parameter.raw.name,
@@ -128,16 +139,24 @@ async function selectionListener() {
   unsubList.push(
     await ableton.song.view.addListener("selected_track", async (track) => {
       if (track) {
-        const value = await track
+        selectedTrack = track;
+        const mixerDevice = await track
           .get("mixer_device")
-          .then((md) => md.get("volume"))
-          .then((v) => v.raw.value.toFixed(2));
+          
+        const volumeParameter = await mixerDevice.get("volume")
+        selectedTrackMixerDevice = mixerDevice;
+        const arm = await track.get("arm")
         sendMessageToModule({
           evt: EVENT.VIEW_TRACK_RX,
-          c: hexToRgb(track.raw.color)
+          vol: volumeParameter.raw.value.toFixed(2),
+          n: track.raw.name,
+          c: hexToRgb(track.raw.color),
+          m: track.raw.mute,
+          s: track.raw.solo,
+          a: arm
         });
         console.log(
-          `${EVENT.VIEW_TRACK_RX} ${track.raw.name}, color: ${hexToRgb(track.raw.color)} solo: ${track.raw.solo}, mute: ${track.raw.mute}, volume: ${value}`,
+          `${EVENT.VIEW_TRACK_RX} ${track.raw.name}, color: ${hexToRgb(track.raw.color)} solo: ${track.raw.solo}, mute: ${track.raw.mute}`,
         );
       } else {
         console.log(EVENT.VIEW_TRACK_RX, null);
@@ -174,7 +193,12 @@ async function updateSessionBoxListeners() {
             await clip_slot.addListener(
               "is_triggered",
               async (bool: boolean) => {
-                console.log(EVENT.CLIP_TRIGGERING, bool);
+                sendMessageToModule({
+                  evt: EVENT.CLIP_TRIGGERING, 
+                  v: bool, 
+                  t: clipSlotIndex, 
+                  s: sceneIndex
+                })
                 // to check which clip is actually playing on a channel, we need to listen for that on tracks!
               },
             ),
@@ -189,6 +213,11 @@ async function updateSessionBoxListeners() {
     unsubList.push(
       await track.addListener("playing_slot_index", (sceneIndex) => {
         // this return "-2" when clips in channel stop playing
+        sendMessageToModule({
+          evt: EVENT.CLIP_PLAYING,
+          t: trackIndex,
+          s: sceneIndex,
+        });
         console.log(EVENT.CLIP_PLAYING, trackIndex, sceneIndex);
       }),
     );
@@ -204,9 +233,10 @@ async function updateSessionBoxListeners() {
     selectedDeviceListener(track, trackIndex);
   });
 
+  // examples...
   setMixerDeviceVolume(1, Math.random());
   setMixerDevicePan(1, Math.random() * 2 - 1);
-  setTrackProperty(0, "mute", true);
+  //setTrackProperty(0, "mute", true);
 }
 
 async function mixerDeviceListener(
@@ -284,15 +314,49 @@ async function selectedDeviceListener(track: Track, trackIndex: number) {
 }
 
 // set arm, mute or solo
-async function setTrackProperty(
-  trackIndex,
+export async function autoSetSelectedTrackProperty(
   property: "arm" | "mute" | "solo",
-  value: boolean,
 ) {
-  await ableton.song
-    .get("tracks")
-    .then((tracks) => tracks[trackIndex])
-    .then((track) => track.set(property, value));
+  if(selectedTrack){
+    const currentState = await selectedTrack.get(property);
+    selectedTrack.set(property, !currentState)
+  }
+}
+
+export async function autoSetSelectedTrackMixerDeviceVolume(volume) {
+  console.log(EVENT.MIXER_VOLUME_RX, volume);
+  volume = volume / 100;
+  if (!(volume <= 1 && volume >= 0)) return;
+  if(selectedTrackMixerDevice){
+    selectedTrackMixerDevice.get("volume").then(v => v.set("value",volume))
+  }
+}
+
+export async function autoSetSelectedTrackMixerDevicePanning(panning) {
+  console.log(EVENT.MIXER_PAN_RX, panning);
+  panning = panning / 100;
+  if (!(panning <= 1 && panning >= -1)) return;
+  if(selectedTrackMixerDevice){
+    selectedTrackMixerDevice.get("panning").then(v => v.set("value",panning))
+  }
+}
+
+export async function autoSetSelectedTrackMixerDeviceSend(index: number, volume: number) {
+  console.log(EVENT.MIXER_SEND_RX, volume);
+  volume = volume / 100;
+  if (!(volume <= 1 && volume >= -1)) return;
+  if(selectedTrackMixerDevice){
+    const sends = await selectedTrackMixerDevice.get("sends");
+    if(sends[index]){
+      sends[index].set("value",volume)
+    }
+  }
+}
+
+export async function autoSetSelectedDeviceParameter(value){
+  if(selectedParameter.parameter){
+    selectedParameter.parameter.set("value", value)
+  }
 }
 
 // change volume of a channel
@@ -330,6 +394,12 @@ async function clipColorListener(
       if (clip) {
         unsubList.push(
           await clip.addListener("color", (color) => {
+            sendMessageToModule({
+              evt: EVENT.COLOR,
+              t: track,
+              s: scene,
+              c: Object.values(color.rgb)
+            });
             console.log(EVENT.COLOR, track, scene, color.rgb);
           }),
         );
@@ -337,6 +407,12 @@ async function clipColorListener(
           .get("color")
           .then((color) => {
             console.log(EVENT.COLOR, track, scene, color.rgb);
+            sendMessageToModule({
+              evt: EVENT.COLOR,
+              t: track,
+              s: scene,
+              c: Object.values(color.rgb)
+            });
             return { track, scene, color: color.rgb };
           })
           .catch((error) => {
@@ -345,6 +421,12 @@ async function clipColorListener(
           });
       } else {
         console.log(EVENT.COLOR, track, scene, { r: 0, g: 0, b: 0 });
+        sendMessageToModule({
+              evt: EVENT.COLOR,
+              t: track,
+              s: scene,
+              c: [0,0,0]
+            });
         return new Promise((res, rej) => {
           res({ track, scene, color: "000000" });
           rej({ track, scene, color: "000000" });
@@ -449,3 +531,4 @@ function hexToRgb(hex) {
   var b = bigint & 255;
   return [r, g, b];
 }
+

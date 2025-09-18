@@ -37,7 +37,7 @@ exports.loadPackage = async function (gridController, persistedData) {
   ableton.init((args) => {
     gridController.sendMessageToEditor({
       type: "execute-lua-script",
-      script: `ableton_js_callback(${JSON.stringify(args)})`,
+      script: `ableton_js_callback(${jsonToLuaTable(args)})`,
     });
   });
 };
@@ -97,9 +97,22 @@ async function sendImmediate(dx, dy, script) {
 }
 
 exports.sendMessage = async function (args) {
-  console.log(args); //Can be seen in Editor logs
 
   console.log("sendMessage", args);
+  const type = args[0];
+  if(type == "selected_track_arm_mute_solo"){
+    ableton.autoSetSelectedTrackProperty(args[1])
+  }
+  if(type == "selected_track_volume"){
+    ableton.autoSetSelectedTrackMixerDeviceVolume(args[1])
+  }
+  if(type == "selected_track_panning"){
+    ableton.autoSetSelectedTrackMixerDevicePanning(args[1])
+  }
+  if(type == "selected_track_send"){
+    ableton.autoSetSelectedTrackMixerDeviceSend(args[1], args[2])
+  }
+
   if (args[0] == "launch-clip") {
     launchClip(args[1], args[2]);
   }
@@ -119,4 +132,25 @@ function notifyStatusChange() {
     type: "client-status",
     myFirstVariable,
   });
+}
+
+function jsonToLuaTable(obj, indent = 0) {
+    const spaces = '  '.repeat(indent);
+    
+    if (Array.isArray(obj)) {
+        const items = obj.map(item => 
+            spaces + '  ' + jsonToLuaTable(item, indent + 1)
+        ).join(',\n');
+        return `{\n${items}\n${spaces}}`;
+    } else if (typeof obj === 'object' && obj !== null) {
+        const pairs = Object.entries(obj).map(([key, value]) => {
+            const luaKey = /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key) ? key : `["${key}"]`;
+            return `${spaces}  ${luaKey} = ${jsonToLuaTable(value, indent + 1)}`;
+        }).join(',\n');
+        return `{\n${pairs}\n${spaces}}`;
+    } else if (typeof obj === 'string') {
+        return `"${obj.replace(/"/g, '\\"')}"`;
+    } else {
+        return String(obj);
+    }
 }
