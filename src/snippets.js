@@ -1,4 +1,3 @@
-
 // export async function autoSetSelectedTrackMixerDeviceVolume(volume) {
 //   console.log(EVENT.MIXER_VOLUME_RX, volume);
 //   volume = volume / 100;
@@ -7,7 +6,6 @@
 //     selectedTrackMixerDevice.get("volume").then(v => v.set("value",volume))
 //   }
 // }
-
 // export async function autoSetSelectedTrackMixerDevicePanning(panning) {
 //   console.log(EVENT.MIXER_PAN_RX, panning);
 //   panning = panning / 100;
@@ -16,7 +14,6 @@
 //     selectedTrackMixerDevice.get("panning").then(v => v.set("value",panning))
 //   }
 // }
-
 // export async function autoSetSelectedTrackMixerDeviceSend(index: number, volume: number) {
 //   console.log(EVENT.MIXER_SEND_RX, volume);
 //   volume = volume / 100;
@@ -28,13 +25,11 @@
 //     }
 //   }
 // }
-
 // export async function autoSetSelectedDeviceParameter(value){
 //   if(selectedParameter.parameter){
 //     selectedParameter.parameter.set("value", value)
 //   }
 // }
-
 // // change volume of a channel
 // async function setMixerDeviceVolume(trackIndex, volume) {
 //   console.log(EVENT.MIXER_VOLUME_RX, trackIndex, volume);
@@ -46,7 +41,6 @@
 //     .then((md) => md.get("volume"))
 //     .then((v) => v.set("value", volume));
 // }
-
 // // change pan on channel
 // async function setMixerDevicePan(trackIndex, pan) {
 //   console.log(EVENT.MIXER_PAN_RX, trackIndex, pan);
@@ -58,7 +52,6 @@
 //     .then((md) => md.get("panning"))
 //     .then((v) => v.set("value", pan));
 // }
-
 // async function clipColorListener(
 //   clip_slot: ClipSlot,
 //   track: number,
@@ -114,14 +107,11 @@
 //       return { track, scene, color: "000000" };
 //     });
 // }
-
 // let activeSceneSubscribtions: Array<() => Promise<boolean | undefined>> = [];
 // async function sceneListener(scenes: Scene[]) {
 //   try {
 //     activeSceneSubscribtions.forEach((sub) => sub());
-
 //     activeSceneSubscribtions = [];
-
 //     const promises = scenes.map(async (scene, row) => {
 //       const sceneListener = await scene.addListener(
 //         "is_triggered",
@@ -131,29 +121,23 @@
 //           console.log("setGridLedColor", led, bool, false);
 //         },
 //       );
-
 //       activeSceneSubscribtions.push(sceneListener);
-
 //       return scene.get("color").then((color) => {
 //         return { row: row, color: color.rgb };
 //       });
 //     });
-
 //     const sceneColors = await Promise.all(promises);
-
 //     console.log("These are the scene colors", sceneColors);
 //     // send immediate
 //   } catch (error) {
 //     console.warn(error);
 //   }
 // }
-
 // // 2, 3
 // function activeRange(track_index: number, scene_index: number): boolean {
 //   // to do.. based on the track_index and scene_index, return if it is within the range defined by SESSION_RING
 //   return true;
 // }
-
 // async function fireSelectedScene() {
 //   await ableton.song.view
 //     .get("selected_scene")
@@ -162,7 +146,6 @@
 //       console.warn(error);
 //     });
 // }
-
 // async function getClipSlot(rowNumber, columnNumber) {
 //   if (rowNumber == undefined || columnNumber == undefined) return;
 //   return await ableton.song
@@ -176,7 +159,6 @@
 //       console.warn(error);
 //     });
 // }
-
 // async function listenForAddedOrDeletedScenes() {
 //   unsubList.push(
 //     await ableton.song.addListener("scenes", async (scenes) => {
@@ -184,7 +166,6 @@
 //     }),
 //   );
 // }
-
 // async function launchClip(rowNumber: number, columnNumber: number) {
 //   const clipSlot = await getClipSlot(rowNumber, columnNumber);
 //   // firing empty clip slot will stop clips on track
@@ -192,15 +173,12 @@
 //     clipSlot.fire();
 //   }
 // }
-
 // async function launchScene(rowNumber) {
 //   const scene = await ableton.song
 //     .get("scenes")
 //     .then((scenes) => scenes[rowNumber]);
 //   scene.fire();
 // }
-
-
 // async function selectedDeviceListener(track: Track, trackIndex: number) {
 //   unsubList.push(
 //     await track.view.addListener("selected_device", (device) => {
@@ -212,9 +190,6 @@
 //     }),
 //   );
 // }
-
-
-
 // async function updateSessionBoxListeners() {
 //   const scenes = await ableton.song.get("scenes");
 //   const tracks = await ableton.song.get("tracks");
@@ -237,7 +212,6 @@
 //               );
 //             }),
 //           );
-
 //           // get triggered change
 //           unsubList.push(
 //             await clip_slot.addListener(
@@ -257,7 +231,6 @@
 //       });
 //     });
 //   });
-
 //   tracks.forEach(async (track, trackIndex) => {
 //     // used to check which clip is playing
 //     unsubList.push(
@@ -271,24 +244,19 @@
 //         console.log(EVENT.CLIP_PLAYING, trackIndex, sceneIndex);
 //       }),
 //     );
-
 //     // get the mixer device for each track and setup volume, pan listeners
 //     const mixerDevice = await track.get("mixer_device");
 //     //mixerDeviceListener(mixerDevice, trackIndex);
-
 //     // arm, mute, solo
 //     //trackListener(track, trackIndex);
-
 //     // selected device
 //     selectedDeviceListener(track, trackIndex);
 //   });
-
 //   // examples...
 //   setMixerDeviceVolume(1, Math.random());
 //   setMixerDevicePan(1, Math.random() * 2 - 1);
 //   //setTrackProperty(0, "mute", true);
 // }
-
 // async function mixerDeviceListener(
 //   mixerDevice: MixerDevice,
 //   trackIndex: number,
@@ -332,7 +300,6 @@
 //     );
 //   });
 // }
-
 // async function trackListener(track: Track, trackIndex: number) {
 //   if(await track.get("can_be_armed")){
 //     unsubList.push(
@@ -352,4 +319,3 @@
 //     }),
 //   );
 // }
-

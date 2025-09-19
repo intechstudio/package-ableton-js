@@ -30,7 +30,7 @@ let sendMessageToModule: (args: any[] | {[key: string]: any}) => void = () => {}
 
 export async function init(sendMessage) {
   await ableton.start();
-  setupSessionBox(4, 4);
+  setupSessionBox(1, 8);
   selectionListener();
   sendMessageToModule = sendMessage;
 }
@@ -106,13 +106,7 @@ async function selectionListener() {
             min,
             max
           }
-          sendMessageToModule({
-            evt: EVENT.VIEW_PARAMETER_RX,
-            n: parameter.raw.name,
-            v: parameter.raw.value,
-            min: min,
-            max: max
-          });
+          sendActivePropertyToGrid();
           console.log(
             EVENT.VIEW_PARAMETER_RX,
             parameter.raw.name,
@@ -157,6 +151,7 @@ async function selectionListener() {
           await volume.addListener("value", (v)=>{
             activeTrackVolumeValue = v.toFixed(2);
             // If we send right away the set changes, circular triggers are present
+            console.log("GREG", activeTrackVolumeValue)
             // sendActivePropertyToGrid();
           })
         )
@@ -191,36 +186,12 @@ async function selectionListener() {
   );
 }
 
-
-async function trackListener(track: Track, trackIndex: number) {
-  if(await track.get("can_be_armed")){
-    unsubList.push(
-      await track.addListener("arm", (data) => {
-        console.log(EVENT.TRACK_ARM_TX, data, trackIndex);
-      }),
-    );
-  }
-  unsubList.push(
-    await track.addListener("solo", (data) => {
-      console.log(EVENT.TRACK_SOLO_TX, data, trackIndex);
-    }),
-  );
-  unsubList.push(
-    await track.addListener("mute", (data) => {
-      console.log(EVENT.TRACK_MUTE_TX, data, trackIndex);
-    }),
-  );
-}
-
-
-
 export async function autoSetActivePropertyValue(value: number){
   if(selectedTrackMixerDevice){
     if(activeProperty == "volume"){
-        selectedTrackMixerDevice.get(activeProperty).then(prop => {
-          prop.set("value",value)
-        })
-      
+      selectedTrackMixerDevice.get(activeProperty).then(prop => {
+        prop.set("value",value)
+      })
     }
     if(activeProperty == "panning"){
       selectedTrackMixerDevice.get(activeProperty).then(prop => {
@@ -235,12 +206,48 @@ export async function autoSetActivePropertyValue(value: number){
         })
       }
     }
+  }
+  if(activeProperty == "lastTouched"){
+    if(selectedParameter){
+      selectedParameter.parameter.set("value", value);
     }
+  }
+}
+
+
+export async function autoResetActiveProperty(){
+ if(selectedTrackMixerDevice){
+    if(activeProperty == "volume"){
+      const prop = await selectedTrackMixerDevice.get(activeProperty);
+      const defaultPropValue = await prop.get("default_value");
+      prop.set("value",Number(defaultPropValue))
+    }
+    if(activeProperty == "panning"){
+      const prop = await selectedTrackMixerDevice.get(activeProperty);
+      const defaultPropValue = await prop.get("default_value");
+      prop.set("value",Number(defaultPropValue))
+    }
+    if(activeProperty == "sends"){
+      const sends = await selectedTrackMixerDevice.get(activeProperty)
+      if(sends.length && activePropertyIndex !== undefined){
+        const defaultPropValue = await sends[0].get("default_value");
+        selectedTrackMixerDevice.get(activeProperty).then(props => {
+          props[activePropertyIndex].set("value",Number(defaultPropValue))
+        })
+      }
+    }
+  }
+  if(activeProperty == "lastTouched"){
+    if(selectedParameter){
+      const defaultPropValue = await selectedParameter.parameter.get("default_value");
+      selectedParameter.parameter.set("value", Number(defaultPropValue));
+    }
+  }
 }
 
 let activeProperty: string | undefined = undefined;
 let activePropertyIndex: number | undefined = undefined;
-function sendActivePropertyToGrid(){
+async function sendActivePropertyToGrid(){
     if(activeProperty == "volume"){
       sendMessageToModule({
         evt: "ST_VOL",
@@ -266,12 +273,15 @@ function sendActivePropertyToGrid(){
       })
     }
 
-    console.log({
-      evt: "ST_DEFAULT",
-      a: activeTrackArmState,
-      s: activeTrackSoloState,
-      m: activeTrackMuteState
-    })
+    if(activeProperty == "lastTouched" ){
+      sendMessageToModule({
+        evt: "ST_LAST",
+        n: selectedParameter.parameter.raw.name,
+        v: selectedParameter.parameter.raw.value,
+        min: selectedParameter.min,
+        max: selectedParameter.max
+      })
+    }
 
     // track defaults
     sendMessageToModule({
@@ -326,8 +336,21 @@ export async function autoSetActiveTrackArmMuteSolo(
   }
 }
 
-export async function navigate(direction){
-  //ableton.application.view.set("")
+export async function navigate(direction: string){
+  const currentTrack = await ableton.song.view.get("selected_track");
+  const allTracks = await ableton.song.get("tracks");
+
+  // Find current track index
+  const currentIndex = allTracks.findIndex(track => track.raw.id === currentTrack.raw.id);
+
+  // Navigate 
+  const dir = direction == "right" ? 1 : -1;
+  const nextIndex = Math.max(0, Math.min(currentIndex + dir, allTracks.length - 1));
+  await ableton.song.view.set("selected_track", allTracks[nextIndex].raw.id);
+  
+  // Update session box offset to follow the selected track
+  const newTrackOffset = Math.max(0, nextIndex - Math.floor(SESSION_RING.tracks / 2));
+  await setSessionBoxOffset(newTrackOffset, SESSION_RING.scene_offset);
 }
 
 function hexToRgb(hex) {

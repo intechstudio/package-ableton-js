@@ -111,6 +111,9 @@ exports.sendMessage = async function (args) {
   if(type == "selected_track_arm_mute_solo"){
     ableton.autoSetActiveTrackArmMuteSolo(args[1])
   }
+  if(type == "reset_active_property"){
+    ableton.autoResetActiveProperty()
+  }
   if(type == "navigate"){
     ableton.navigate(args[1])
   }
