@@ -100,9 +100,22 @@ exports.sendMessage = async function (args) {
 
   console.log("sendMessage", args);
   const type = args[0];
-  if(type == "selected_track_arm_mute_solo"){
-    ableton.autoSetSelectedTrackProperty(args[1])
+
+  // v2
+  if(type == "set_active_property"){
+    ableton.autoSetActiveProperty(args[1], args[2])
   }
+  if(type == "set_active_property_value"){
+    ableton.autoSetActivePropertyValue(args[1])
+  }
+  if(type == "selected_track_arm_mute_solo"){
+    ableton.autoSetActiveTrackArmMuteSolo(args[1])
+  }
+  if(type == "navigate"){
+    ableton.navigate(args[1])
+  }
+
+  // v1
   if(type == "selected_track_volume"){
     ableton.autoSetSelectedTrackMixerDeviceVolume(args[1])
   }
@@ -113,6 +126,7 @@ exports.sendMessage = async function (args) {
     ableton.autoSetSelectedTrackMixerDeviceSend(args[1], args[2])
   }
 
+  // v0
   if (args[0] == "launch-clip") {
     launchClip(args[1], args[2]);
   }

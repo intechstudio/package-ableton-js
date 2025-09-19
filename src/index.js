@@ -13,9 +13,13 @@ exports.init = init;
 exports.close = close;
 exports.setupSessionBox = setupSessionBox;
 exports.setSessionBoxOffset = setSessionBoxOffset;
-exports.autoSetSelectedTrackProperty = autoSetSelectedTrackProperty;
+exports.autoSetActivePropertyValue = autoSetActivePropertyValue;
+exports.autoSetActiveProperty = autoSetActiveProperty;
+exports.autoSetActiveTrackArmMuteSolo = autoSetActiveTrackArmMuteSolo;
 exports.autoSetSelectedTrackMixerDeviceVolume = autoSetSelectedTrackMixerDeviceVolume;
 exports.autoSetSelectedTrackMixerDevicePanning = autoSetSelectedTrackMixerDevicePanning;
+exports.autoSetSelectedTrackMixerDeviceSend = autoSetSelectedTrackMixerDeviceSend;
+exports.autoSetSelectedDeviceParameter = autoSetSelectedDeviceParameter;
 const ableton_js_1 = require("ableton-js");
 // Log all messages to the console
 const ableton = new ableton_js_1.Ableton({ logger: console });
@@ -91,6 +95,14 @@ var EVENT;
 })(EVENT || (EVENT = {}));
 let selectedTrack = undefined;
 let selectedTrackMixerDevice = undefined;
+let selectedParameter = undefined;
+// v2
+let activeTrackSendValues = [];
+let activeTrackVolumeValue;
+let activeTrackPanningValue;
+let activeTrackMuteState;
+let activeTrackArmState;
+let activeTrackSoloState;
 function selectionListener() {
     return __awaiter(this, void 0, void 0, function* () {
         unsubList.push(yield ableton.song.view.addListener("selected_parameter", (parameter) => __awaiter(this, void 0, void 0, function* () {
@@ -99,6 +111,11 @@ function selectionListener() {
                     parameter.get("min"),
                     parameter.get("max"),
                 ]);
+                selectedParameter = {
+                    parameter,
+                    min,
+                    max
+                };
                 sendMessageToModule({
                     evt: EVENT.VIEW_PARAMETER_RX,
                     n: parameter.raw.name,
@@ -115,20 +132,43 @@ function selectionListener() {
         unsubList.push(yield ableton.song.view.addListener("selected_track", (track) => __awaiter(this, void 0, void 0, function* () {
             if (track) {
                 selectedTrack = track;
-                const mixerDevice = yield track
-                    .get("mixer_device");
-                const volumeParameter = yield mixerDevice.get("volume");
+                const mixerDevice = yield track.get("mixer_device");
                 selectedTrackMixerDevice = mixerDevice;
-                const arm = yield track.get("arm");
-                sendMessageToModule({
-                    evt: EVENT.VIEW_TRACK_RX,
-                    vol: volumeParameter.raw.value.toFixed(2),
-                    n: track.raw.name,
-                    c: hexToRgb(track.raw.color),
-                    m: track.raw.mute,
-                    s: track.raw.solo,
-                    a: arm
-                });
+                // master channel has no sends!
+                const sends = yield mixerDevice.get("sends");
+                if (sends.length && activePropertyIndex !== undefined) {
+                    console.log(sends[activePropertyIndex].raw);
+                    activeTrackSendValues[activePropertyIndex] = sends[activePropertyIndex].raw.value.toFixed(2);
+                    unsubList.push(yield mixerDevice.addListener("sends", (sends) => {
+                        sends.forEach((send, index) => __awaiter(this, void 0, void 0, function* () {
+                            activeTrackSendValues[index] = yield send.get("value");
+                            // If we send right away the set changes, circular triggers are present
+                            // sendActivePropertyToGrid();
+                        }));
+                    }));
+                }
+                // volume (fader)
+                const volume = yield mixerDevice.get("volume");
+                activeTrackVolumeValue = volume.raw.value.toFixed(2);
+                unsubList.push(yield volume.addListener("value", (v) => {
+                    activeTrackVolumeValue = v.toFixed(2);
+                    // If we send right away the set changes, circular triggers are present
+                    // sendActivePropertyToGrid();
+                }));
+                //  panning
+                const panning = yield mixerDevice.get("panning");
+                activeTrackPanningValue = panning.raw.value.toFixed(2);
+                unsubList.push(yield panning.addListener("value", (v) => {
+                    activeTrackPanningValue = v.toFixed(2);
+                    // If we send right away the set changes, circular triggers are present
+                    // sendActivePropertyToGrid();
+                }));
+                if (yield track.get("can_be_armed")) {
+                    activeTrackArmState = yield track.get("arm");
+                }
+                activeTrackMuteState = track.raw.mute;
+                activeTrackSoloState = track.raw.solo;
+                sendActivePropertyToGrid();
                 console.log(`${EVENT.VIEW_TRACK_RX} ${track.raw.name}, color: ${hexToRgb(track.raw.color)} solo: ${track.raw.solo}, mute: ${track.raw.mute}`);
             }
             else {
@@ -183,9 +223,9 @@ function updateSessionBoxListeners() {
             }));
             // get the mixer device for each track and setup volume, pan listeners
             const mixerDevice = yield track.get("mixer_device");
-            mixerDeviceListener(mixerDevice, trackIndex);
+            //mixerDeviceListener(mixerDevice, trackIndex);
             // arm, mute, solo
-            trackListener(track, trackIndex);
+            //trackListener(track, trackIndex);
             // selected device
             selectedDeviceListener(track, trackIndex);
         }));
@@ -195,39 +235,56 @@ function updateSessionBoxListeners() {
         //setTrackProperty(0, "mute", true);
     });
 }
-function mixerDeviceListener(mixerDevice, trackIndex) {
-    return __awaiter(this, void 0, void 0, function* () {
-        // channel fader
-        const fader = yield mixerDevice.get("volume");
-        const initialFaderValue = yield fader.get("value");
-        console.log(EVENT.MIXER_VOLUME_TX, trackIndex, initialFaderValue.toFixed(2));
-        unsubList.push(yield fader.addListener("value", (data) => {
-            console.log(EVENT.MIXER_VOLUME_TX, trackIndex, data.toFixed(2));
-        }));
-        // panning
-        const pan = yield mixerDevice.get("panning");
-        const initialPanValue = yield fader.get("value");
-        console.log(EVENT.MIXER_PAN_TX, trackIndex, initialPanValue.toFixed(2));
-        unsubList.push(yield pan.addListener("value", (data) => {
-            console.log(EVENT.MIXER_PAN_TX, trackIndex, data.toFixed(2));
-        }));
-        // sends
-        const sends = yield mixerDevice.get("sends");
-        sends.forEach((send, sendIndex) => __awaiter(this, void 0, void 0, function* () {
-            // ! I think we should limit this to certain number of sends, but it's ok as it is
-            const initialSendValue = yield send.get("value");
-            console.log(`${EVENT.MIXER_SEND_TX} track: ${trackIndex} send: ${sendIndex} ${initialSendValue.toFixed(2)}`);
-            unsubList.push(yield send.addListener("value", (data) => {
-                console.log(`${EVENT.MIXER_SEND_TX} track: ${trackIndex} send: ${sendIndex} ${data.toFixed(2)}`);
-            }));
-        }));
-    });
-}
+// async function mixerDeviceListener(
+//   mixerDevice: MixerDevice,
+//   trackIndex: number,
+// ) {
+//   // channel fader
+//   const fader = await mixerDevice.get("volume");
+//   const initialFaderValue = await fader.get("value");
+//   console.log(EVENT.MIXER_VOLUME_TX, trackIndex, initialFaderValue.toFixed(2));
+//   unsubList.push(
+//     await fader.addListener("value", (data) => {
+//       console.log(EVENT.MIXER_VOLUME_TX, trackIndex, data.toFixed(2));
+//     }),
+//   );
+//   // panning
+//   const pan = await mixerDevice.get("panning");
+//   const initialPanValue = await fader.get("value");
+//   console.log(EVENT.MIXER_PAN_TX, trackIndex, initialPanValue.toFixed(2));
+//   unsubList.push(
+//     await pan.addListener("value", (data) => {
+//       console.log(EVENT.MIXER_PAN_TX, trackIndex, data.toFixed(2));
+//     }),
+//   );
+//   // sends
+//   const sends = await mixerDevice.get("sends");
+//   sends.forEach(async (send, sendIndex) => {
+//     // ! I think we should limit this to certain number of sends, but it's ok as it is
+//     const initialSendValue = await send.get("value");
+//     console.log(
+//       `${
+//         EVENT.MIXER_SEND_TX
+//       } track: ${trackIndex} send: ${sendIndex} ${initialSendValue.toFixed(2)}`,
+//     );
+//     unsubList.push(
+//       await send.addListener("value", (data) => {
+//         console.log(
+//           `${
+//             EVENT.MIXER_SEND_TX
+//           } track: ${trackIndex} send: ${sendIndex} ${data.toFixed(2)}`,
+//         );
+//       }),
+//     );
+//   });
+// }
 function trackListener(track, trackIndex) {
     return __awaiter(this, void 0, void 0, function* () {
-        unsubList.push(yield track.addListener("arm", (data) => {
-            console.log(EVENT.TRACK_ARM_TX, data, trackIndex);
-        }));
+        if (yield track.get("can_be_armed")) {
+            unsubList.push(yield track.addListener("arm", (data) => {
+                console.log(EVENT.TRACK_ARM_TX, data, trackIndex);
+            }));
+        }
         unsubList.push(yield track.addListener("solo", (data) => {
             console.log(EVENT.TRACK_SOLO_TX, data, trackIndex);
         }));
@@ -243,12 +300,113 @@ function selectedDeviceListener(track, trackIndex) {
         }));
     });
 }
+function autoSetActivePropertyValue(value) {
+    return __awaiter(this, void 0, void 0, function* () {
+        if (selectedTrackMixerDevice) {
+            if (activeProperty == "volume") {
+                selectedTrackMixerDevice.get(activeProperty).then(prop => {
+                    prop.set("value", value);
+                });
+            }
+            if (activeProperty == "panning") {
+                selectedTrackMixerDevice.get(activeProperty).then(prop => {
+                    prop.set("value", value);
+                });
+            }
+            if (activeProperty == "sends") {
+                const sends = yield selectedTrackMixerDevice.get(activeProperty);
+                if (sends.length && activePropertyIndex !== undefined) {
+                    selectedTrackMixerDevice.get(activeProperty).then(props => {
+                        props[activePropertyIndex].set("value", value);
+                    });
+                }
+            }
+        }
+    });
+}
+let activeProperty = undefined;
+let activePropertyIndex = undefined;
+function sendActivePropertyToGrid() {
+    if (activeProperty == "volume") {
+        sendMessageToModule({
+            evt: "ST_VOL",
+            v: activeTrackVolumeValue,
+            min: 0,
+            max: 1
+        });
+    }
+    if (activeProperty == "panning") {
+        sendMessageToModule({
+            evt: "ST_PAN",
+            v: activeTrackPanningValue,
+            min: -1,
+            max: 1
+        });
+    }
+    if (activeProperty == "sends") {
+        sendMessageToModule({
+            evt: "ST_SEND",
+            v: activeTrackSendValues[activePropertyIndex],
+            min: 0,
+            max: 1
+        });
+    }
+    console.log({
+        evt: "ST_DEFAULT",
+        a: activeTrackArmState,
+        s: activeTrackSoloState,
+        m: activeTrackMuteState
+    });
+    // track defaults
+    sendMessageToModule({
+        evt: "ST_DEFAULT",
+        a: activeTrackArmState,
+        s: activeTrackSoloState,
+        m: activeTrackMuteState
+    });
+}
+function autoSetActiveProperty(prop, index) {
+    return __awaiter(this, void 0, void 0, function* () {
+        activeProperty = prop;
+        activePropertyIndex = index;
+        console.log("autoSetActiveProperty", activeProperty, activePropertyIndex);
+        // When property selection is triggered on Grid, send back to Grid the property details
+        sendActivePropertyToGrid();
+    });
+}
 // set arm, mute or solo
-function autoSetSelectedTrackProperty(property) {
+function autoSetActiveTrackArmMuteSolo(property) {
     return __awaiter(this, void 0, void 0, function* () {
         if (selectedTrack) {
-            const currentState = yield selectedTrack.get(property);
-            selectedTrack.set(property, !currentState);
+            let currentState;
+            // groups, returns and master has no arm!
+            if (property == "arm") {
+                const can_be_armed = yield selectedTrack.get("can_be_armed");
+                console.log("can_be_armed", can_be_armed);
+                if (can_be_armed) {
+                    currentState = yield selectedTrack.get(property);
+                    selectedTrack.set(property, !currentState);
+                }
+            }
+            else {
+                currentState = yield selectedTrack.get(property);
+                selectedTrack.set(property, !currentState);
+            }
+            if (property == "arm") {
+                activeTrackArmState = !currentState;
+            }
+            if (property == "mute") {
+                activeTrackMuteState = !currentState;
+            }
+            if (property == "solo") {
+                activeTrackSoloState = !currentState;
+            }
+            sendMessageToModule({
+                evt: "ST_DEFAULT",
+                a: activeTrackArmState,
+                s: activeTrackSoloState,
+                m: activeTrackMuteState
+            });
         }
     });
 }
@@ -271,6 +429,27 @@ function autoSetSelectedTrackMixerDevicePanning(panning) {
             return;
         if (selectedTrackMixerDevice) {
             selectedTrackMixerDevice.get("panning").then(v => v.set("value", panning));
+        }
+    });
+}
+function autoSetSelectedTrackMixerDeviceSend(index, volume) {
+    return __awaiter(this, void 0, void 0, function* () {
+        console.log(EVENT.MIXER_SEND_RX, volume);
+        volume = volume / 100;
+        if (!(volume <= 1 && volume >= -1))
+            return;
+        if (selectedTrackMixerDevice) {
+            const sends = yield selectedTrackMixerDevice.get("sends");
+            if (sends[index]) {
+                sends[index].set("value", volume);
+            }
+        }
+    });
+}
+function autoSetSelectedDeviceParameter(value) {
+    return __awaiter(this, void 0, void 0, function* () {
+        if (selectedParameter.parameter) {
+            selectedParameter.parameter.set("value", value);
         }
     });
 }
