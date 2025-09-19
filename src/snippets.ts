@@ -1,4 +1,3 @@
-
 // export async function autoSetSelectedTrackMixerDeviceVolume(volume) {
 //   console.log(EVENT.MIXER_VOLUME_RX, volume);
 //   volume = volume / 100;
@@ -200,7 +199,6 @@
 //   scene.fire();
 // }
 
-
 // async function selectedDeviceListener(track: Track, trackIndex: number) {
 //   unsubList.push(
 //     await track.view.addListener("selected_device", (device) => {
@@ -212,8 +210,6 @@
 //     }),
 //   );
 // }
-
-
 
 // async function updateSessionBoxListeners() {
 //   const scenes = await ableton.song.get("scenes");
@@ -244,9 +240,9 @@
 //               "is_triggered",
 //               async (bool: boolean) => {
 //                 sendMessageToModule({
-//                   evt: EVENT.CLIP_TRIGGERING, 
-//                   v: bool, 
-//                   t: clipSlotIndex, 
+//                   evt: EVENT.CLIP_TRIGGERING,
+//                   v: bool,
+//                   t: clipSlotIndex,
 //                   s: sceneIndex
 //                 })
 //                 // to check which clip is actually playing on a channel, we need to listen for that on tracks!
@@ -352,4 +348,3 @@
 //     }),
 //   );
 // }
-

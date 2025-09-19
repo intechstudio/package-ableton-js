@@ -97,36 +97,35 @@ async function sendImmediate(dx, dy, script) {
 }
 
 exports.sendMessage = async function (args) {
-
   console.log("sendMessage", args);
   const type = args[0];
 
   // v2
-  if(type == "set_active_property"){
-    ableton.autoSetActiveProperty(args[1], args[2])
+  if (type == "set_active_property") {
+    ableton.autoSetActiveProperty(args[1], args[2]);
   }
-  if(type == "set_active_property_value"){
-    ableton.autoSetActivePropertyValue(args[1])
+  if (type == "set_active_property_value") {
+    ableton.autoSetActivePropertyValue(args[1]);
   }
-  if(type == "selected_track_arm_mute_solo"){
-    ableton.autoSetActiveTrackArmMuteSolo(args[1])
+  if (type == "selected_track_arm_mute_solo") {
+    ableton.autoSetActiveTrackArmMuteSolo(args[1]);
   }
-  if(type == "reset_active_property"){
-    ableton.autoResetActiveProperty()
+  if (type == "reset_active_property") {
+    ableton.autoResetActiveProperty();
   }
-  if(type == "navigate"){
-    ableton.navigate(args[1])
+  if (type == "navigate") {
+    ableton.navigate(args[1]);
   }
 
   // v1
-  if(type == "selected_track_volume"){
-    ableton.autoSetSelectedTrackMixerDeviceVolume(args[1])
+  if (type == "selected_track_volume") {
+    ableton.autoSetSelectedTrackMixerDeviceVolume(args[1]);
   }
-  if(type == "selected_track_panning"){
-    ableton.autoSetSelectedTrackMixerDevicePanning(args[1])
+  if (type == "selected_track_panning") {
+    ableton.autoSetSelectedTrackMixerDevicePanning(args[1]);
   }
-  if(type == "selected_track_send"){
-    ableton.autoSetSelectedTrackMixerDeviceSend(args[1], args[2])
+  if (type == "selected_track_send") {
+    ableton.autoSetSelectedTrackMixerDeviceSend(args[1], args[2]);
   }
 
   // v0
@@ -152,22 +151,26 @@ function notifyStatusChange() {
 }
 
 function jsonToLuaTable(obj, indent = 0) {
-    const spaces = '  '.repeat(indent);
-    
-    if (Array.isArray(obj)) {
-        const items = obj.map(item => 
-            spaces + '  ' + jsonToLuaTable(item, indent + 1)
-        ).join(',\n');
-        return `{\n${items}\n${spaces}}`;
-    } else if (typeof obj === 'object' && obj !== null) {
-        const pairs = Object.entries(obj).map(([key, value]) => {
-            const luaKey = /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key) ? key : `["${key}"]`;
-            return `${spaces}  ${luaKey} = ${jsonToLuaTable(value, indent + 1)}`;
-        }).join(',\n');
-        return `{\n${pairs}\n${spaces}}`;
-    } else if (typeof obj === 'string') {
-        return `"${obj.replace(/"/g, '\\"')}"`;
-    } else {
-        return String(obj);
-    }
+  const spaces = "  ".repeat(indent);
+
+  if (Array.isArray(obj)) {
+    const items = obj
+      .map((item) => spaces + "  " + jsonToLuaTable(item, indent + 1))
+      .join(",\n");
+    return `{\n${items}\n${spaces}}`;
+  } else if (typeof obj === "object" && obj !== null) {
+    const pairs = Object.entries(obj)
+      .map(([key, value]) => {
+        const luaKey = /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key)
+          ? key
+          : `["${key}"]`;
+        return `${spaces}  ${luaKey} = ${jsonToLuaTable(value, indent + 1)}`;
+      })
+      .join(",\n");
+    return `{\n${pairs}\n${spaces}}`;
+  } else if (typeof obj === "string") {
+    return `"${obj.replace(/"/g, '\\"')}"`;
+  } else {
+    return String(obj);
+  }
 }

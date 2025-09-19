@@ -218,9 +218,9 @@
 //               "is_triggered",
 //               async (bool: boolean) => {
 //                 sendMessageToModule({
-//                   evt: EVENT.CLIP_TRIGGERING, 
-//                   v: bool, 
-//                   t: clipSlotIndex, 
+//                   evt: EVENT.CLIP_TRIGGERING,
+//                   v: bool,
+//                   t: clipSlotIndex,
 //                   s: sceneIndex
 //                 })
 //                 // to check which clip is actually playing on a channel, we need to listen for that on tracks!
