@@ -156,7 +156,6 @@ async function selectionListener() {
           await volume.addListener("value", (v) => {
             activeTrackVolumeValue = v.toFixed(2);
             // If we send right away the set changes, circular triggers are present
-            console.log("GREG", activeTrackVolumeValue);
             // sendActivePropertyToGrid();
           })
         );
