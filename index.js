@@ -100,6 +100,14 @@ exports.sendMessage = async function (args) {
   console.log("sendMessage", args);
   const type = args[0];
 
+  // v3 2025-11-03
+  if(type == "play_or_stop") {
+    ableton.playOrStop();   
+  }
+  if(type == "record"){
+    ableton.record()
+  }
+
   // v2
   if (type == "set_active_property") {
     ableton.autoSetActiveProperty(args[1], args[2]);

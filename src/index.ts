@@ -95,6 +95,9 @@ let activeTrackMuteState;
 let activeTrackArmState;
 let activeTrackSoloState;
 
+// v3
+let activeTrackName;
+
 async function selectionListener() {
   unsubList.push(
     await ableton.song.view.addListener(
@@ -133,20 +136,17 @@ async function selectionListener() {
         selectedTrackMixerDevice = mixerDevice;
 
         // master channel has no sends!
+        // sends!
         const sends = await mixerDevice.get("sends");
-        if (sends.length && activePropertyIndex !== undefined) {
-          console.log(sends[activePropertyIndex].raw);
-          activeTrackSendValues[activePropertyIndex] =
-            sends[activePropertyIndex].raw.value.toFixed(2);
-          unsubList.push(
-            await mixerDevice.addListener("sends", (sends) => {
-              sends.forEach(async (send, index) => {
-                activeTrackSendValues[index] = await send.get("value");
-                // If we send right away the set changes, circular triggers are present
-                // sendActivePropertyToGrid();
-              });
-            })
-          );
+        if(sends.length > 0){
+           sends.forEach(async (send, index) => {
+            activeTrackSendValues[index] = await send.raw.value.toFixed(2);
+            unsubList.push(
+              await send.addListener("value", (v) => {
+                activeTrackSendValues[index] = v.toFixed(2)
+              })
+            )
+          })
         }
 
         // volume (fader)
@@ -155,8 +155,6 @@ async function selectionListener() {
         unsubList.push(
           await volume.addListener("value", (v) => {
             activeTrackVolumeValue = v.toFixed(2);
-            // If we send right away the set changes, circular triggers are present
-            // sendActivePropertyToGrid();
           })
         );
 
@@ -166,18 +164,48 @@ async function selectionListener() {
         unsubList.push(
           await panning.addListener("value", (v) => {
             activeTrackPanningValue = v.toFixed(2);
-            // If we send right away the set changes, circular triggers are present
-            // sendActivePropertyToGrid();
           })
         );
 
+        // track arm
         if (await track.get("can_be_armed")) {
           activeTrackArmState = await track.get("arm");
+          unsubList.push(
+            await track.addListener("arm", (data) => {
+              activeTrackArmState = data;
+              sendActivePropertyToGrid();
+            })
+          )
         }
-        activeTrackMuteState = track.raw.mute;
-        activeTrackSoloState = track.raw.solo;
 
+        // track mute
+        activeTrackMuteState = track.raw.mute;
+        unsubList.push(
+          await track.addListener("mute", (data)=> {
+            activeTrackMuteState = data;
+            sendActivePropertyToGrid();
+          })
+        )
+
+        // track solo
+        activeTrackSoloState = track.raw.solo;
+        unsubList.push(
+          await track.addListener("solo", (data)=> {
+            activeTrackSoloState = data;
+            sendActivePropertyToGrid();
+          })
+        )
+
+        activeTrackName = track.raw.name
         sendActivePropertyToGrid();
+
+        sendMessageToModule({
+          gui: true,
+          tn: activeTrackName,
+          c: Array.from(hexToRgb(
+            track.raw.color
+          ))
+        })
 
         console.log(
           `${EVENT.VIEW_TRACK_RX} ${track.raw.name}, color: ${hexToRgb(
@@ -214,7 +242,9 @@ export async function autoSetActivePropertyValue(value: number) {
   }
   if (activeProperty == "lastTouched") {
     if (selectedParameter) {
-      selectedParameter.parameter.set("value", value);
+      if(selectedParameter.parameter){
+        selectedParameter.parameter.set("value", value);
+      }
     }
   }
 }
@@ -246,7 +276,9 @@ export async function autoResetActiveProperty() {
       const defaultPropValue = await selectedParameter.parameter.get(
         "default_value"
       );
-      selectedParameter.parameter.set("value", Number(defaultPropValue));
+      if(defaultPropValue){
+        selectedParameter.parameter.set("value", Number(defaultPropValue));
+      }
     }
   }
 }
@@ -271,9 +303,11 @@ async function sendActivePropertyToGrid() {
     });
   }
   if (activeProperty == "sends") {
+    console.log("ST_SEND ST_SEND", activeTrackSendValues)
     sendMessageToModule({
       evt: "ST_SEND",
-      v: activeTrackSendValues[activePropertyIndex],
+      ap: activePropertyIndex,
+      v: activeTrackSendValues, // sends an array! (table)
       min: 0,
       max: 1,
     });
@@ -314,7 +348,6 @@ export async function autoSetActiveTrackArmMuteSolo(
     // groups, returns and master has no arm!
     if (property == "arm") {
       const can_be_armed = await selectedTrack.get("can_be_armed");
-      console.log("can_be_armed", can_be_armed);
       if (can_be_armed) {
         currentState = await selectedTrack.get(property);
         selectedTrack.set(property, !currentState);
@@ -365,6 +398,24 @@ export async function navigate(direction: string) {
     nextIndex - Math.floor(SESSION_RING.tracks / 2)
   );
   await setSessionBoxOffset(newTrackOffset, SESSION_RING.scene_offset);
+}
+
+export async function playOrStop(){
+  const isPlaying = await ableton.song.get("is_playing");
+  if(isPlaying == true) {
+    await ableton.song.stopPlaying();
+  } else {
+    await ableton.song.startPlaying();
+  }
+}
+
+export async function record(){
+  const isRecording = await ableton.song.get("record_mode");
+  if( isRecording == 1){
+    await ableton.song.set("record_mode", 0);
+  } else {
+    await ableton.song.set("record_mode", 1);
+  }
 }
 
 function hexToRgb(hex) {
