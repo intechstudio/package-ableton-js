@@ -21,11 +21,13 @@ npm run ableton:setup
 ```
 
 This will automatically:
+
 - Copy the MIDI script files to your Ableton Remote Scripts folder
 - Clean up unnecessary files
 - Work on both macOS and Windows
 
 **After running this command:**
+
 1. Restart Ableton Live
 2. Go to Preferences > MIDI
 3. Select "AbletonJS" as a Control Surface
@@ -35,11 +37,13 @@ This will automatically:
 If you prefer to install manually, you can open the relevant folders:
 
 **Open the Remote Scripts destination folder:**
+
 ```bash
 npm run ableton:open-remote-scripts
 ```
 
 **Open the MIDI script source folder:**
+
 ```bash
 npm run ableton:open-midi-script-source
 ```

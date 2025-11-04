@@ -96,25 +96,33 @@
       <BlockTitle>AbletonJS MIDI Script Setup</BlockTitle>
       <BlockBody>
         <p class="mb-4 opacity-80">
-          To use AbletonJS with Grid, you need to install the MIDI script to your Ableton Remote Scripts folder.
+          To use AbletonJS with Grid, you need to install the MIDI script to
+          your Ableton Remote Scripts folder.
         </p>
-        
+
         <div class="mb-4">
-          <h3 class="text-sm font-semibold mb-2">📦 Automatic Installation (Recommended)</h3>
+          <h3 class="text-sm font-semibold mb-2">
+            📦 Automatic Installation (Recommended)
+          </h3>
           <p class=" mb-2 opacity-70">
             Click this button to automatically copy the MIDI script to Ableton.
           </p>
-          <MoltenButton 
-            title={"🚀 Install MIDI Script"} 
-            click={installMidiScript} 
+          <MoltenButton
+            title={"🚀 Install MIDI Script"}
+            click={installMidiScript}
           />
           {#if installationStatus}
-            <div class="mt-2 p-2 rounded text-xs {installationSuccess ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'}">
+            <div
+              class="mt-2 p-2 rounded text-xs {installationSuccess
+                ? 'bg-green-900/30 text-green-400'
+                : 'bg-red-900/30 text-red-400'}"
+            >
               {installationStatus}
             </div>
           {/if}
           <p class="mt-2 opacity-60">
-            After installation: Restart Ableton → Preferences → MIDI → Select "AbletonJS"
+            After installation: Restart Ableton → Preferences → MIDI → Select
+            "AbletonJS"
           </p>
         </div>
 
@@ -124,13 +132,13 @@
             Open folders to manually copy the MIDI script files.
           </p>
           <div class="flex gap-2">
-            <MoltenButton 
-              title={"Open Destination Folder"} 
-              click={openRemoteScriptsFolder} 
+            <MoltenButton
+              title={"Open Destination Folder"}
+              click={openRemoteScriptsFolder}
             />
-            <MoltenButton 
-              title={"Open Source Folder"} 
-              click={openMidiScriptSource} 
+            <MoltenButton
+              title={"Open Source Folder"}
+              click={openMidiScriptSource}
             />
           </div>
           <p class="mt-2 opacity-60">

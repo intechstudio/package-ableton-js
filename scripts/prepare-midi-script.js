@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-const fs = require('fs');
-const path = require('path');
+const fs = require("fs");
+const path = require("path");
 
 /**
  * Copy the midi-script from node_modules to the package directory
@@ -10,17 +10,17 @@ const path = require('path');
 function prepareMidiScript() {
   const sourcePath = path.join(
     __dirname,
-    '../node_modules/ableton-js/midi-script'
+    "../node_modules/ableton-js/midi-script"
   );
-  const targetPath = path.join(__dirname, '../midi-script');
+  const targetPath = path.join(__dirname, "../midi-script");
 
   if (!fs.existsSync(sourcePath)) {
-    console.error('❌ Could not find midi-script in node_modules/ableton-js');
-    console.error('   Please run: npm install');
+    console.error("❌ Could not find midi-script in node_modules/ableton-js");
+    console.error("   Please run: npm install");
     process.exit(1);
   }
 
-  console.log('📋 Copying midi-script to package directory...');
+  console.log("📋 Copying midi-script to package directory...");
 
   // Remove existing midi-script directory if it exists
   if (fs.existsSync(targetPath)) {
@@ -30,7 +30,7 @@ function prepareMidiScript() {
   // Copy the directory
   copyDir(sourcePath, targetPath);
 
-  console.log('✅ MIDI script prepared for packaging!');
+  console.log("✅ MIDI script prepared for packaging!");
 }
 
 /**

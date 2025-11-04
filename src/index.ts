@@ -141,15 +141,15 @@ async function selectionListener() {
         // master channel has no sends!
         // sends!
         const sends = await mixerDevice.get("sends");
-        if(sends.length > 0){
-           sends.forEach(async (send, index) => {
+        if (sends.length > 0) {
+          sends.forEach(async (send, index) => {
             activeTrackSendValues[index] = await send.raw.value.toFixed(2);
             unsubList.push(
-              await send.addListener("value", (v) => {
-                activeTrackSendValues[index] = v.toFixed(2)
+              await send.addListener("value", (v) => {
+                activeTrackSendValues[index] = v.toFixed(2);
               })
-            )
-          })
+            );
+          });
         }
 
         // volume (fader)
@@ -180,54 +180,52 @@ async function selectionListener() {
               // while on track, send down the changes
               sendActivePropertyToGrid();
             })
-          )
+          );
         }
 
         // track mute
         // master does not have mute
-        if(track.raw.id !== masterTrack.raw.id) {
+        if (track.raw.id !== masterTrack.raw.id) {
           activeTrackMuteState = track.raw.mute;
           unsubList.push(
-            await track.addListener("mute", (data)=> {
+            await track.addListener("mute", (data) => {
               activeTrackMuteState = data;
               // while on track, send down the changes
               sendActivePropertyToGrid();
             })
-          )
+          );
         }
 
         // track solo
         // master does not have solo
-        if(track.raw.id !== masterTrack.raw.id) {
+        if (track.raw.id !== masterTrack.raw.id) {
           activeTrackSoloState = track.raw.solo;
           unsubList.push(
-            await track.addListener("solo", (data)=> {
+            await track.addListener("solo", (data) => {
               activeTrackSoloState = data;
               // while on track, send down the changes
               sendActivePropertyToGrid();
             })
-          )
+          );
         }
 
-        activeTrackName = track.raw.name
+        activeTrackName = track.raw.name;
         sendActivePropertyToGrid();
 
         sendMessageToModule({
           gui: true,
           tn: activeTrackName,
-          c: Array.from(hexToRgb(
-            track.raw.color
-          ))
-        })
+          c: Array.from(hexToRgb(track.raw.color)),
+        });
 
         // update the session box when user clicks on a track in ableton
         const allTracks = await ableton.song.get("tracks");
         const currentIndex = allTracks.findIndex(
           (track) => track.raw.id === selectedTrack.raw.id
-        ); 
-        if(currentIndex !== SESSION_RING.track_offset && currentIndex !== -1){
+        );
+        if (currentIndex !== SESSION_RING.track_offset && currentIndex !== -1) {
           setSessionBoxOffset(currentIndex, SESSION_RING.scene_offset);
-        } 
+        }
 
         console.log(
           `${EVENT.VIEW_TRACK_RX} ${track.raw.name}, color: ${hexToRgb(
@@ -264,7 +262,7 @@ export async function autoSetActivePropertyValue(value: number) {
   }
   if (activeProperty == "lastTouched") {
     if (selectedParameter) {
-      if(selectedParameter.parameter){
+      if (selectedParameter.parameter) {
         selectedParameter.parameter.set("value", value);
       }
     }
@@ -298,7 +296,7 @@ export async function autoResetActiveProperty() {
       const defaultPropValue = await selectedParameter.parameter.get(
         "default_value"
       );
-      if(defaultPropValue){
+      if (defaultPropValue) {
         selectedParameter.parameter.set("value", Number(defaultPropValue));
       }
     }
@@ -336,7 +334,7 @@ async function sendActivePropertyToGrid() {
 
   if (activeProperty == "lastTouched") {
     // while no parameter has been selected, but this is called, check first if selectedParameter even exists.
-    if(selectedParameter){
+    if (selectedParameter) {
       sendMessageToModule({
         evt: "ST_LAST",
         n: selectedParameter.parameter.raw.name,
@@ -424,23 +422,22 @@ export async function navigate(direction: string) {
     // );
     await setSessionBoxOffset(nextIndex, SESSION_RING.scene_offset);
   } catch (error) {
-    console.log("Next track is out of range.")
+    console.log("Next track is out of range.");
   }
-  
 }
 
-export async function playOrStop(){
+export async function playOrStop() {
   const isPlaying = await ableton.song.get("is_playing");
-  if(isPlaying == true) {
+  if (isPlaying == true) {
     await ableton.song.stopPlaying();
   } else {
     await ableton.song.startPlaying();
   }
 }
 
-export async function record(){
+export async function record() {
   const isRecording = await ableton.song.get("record_mode");
-  if( isRecording == 1){
+  if (isRecording == 1) {
     await ableton.song.set("record_mode", 0);
   } else {
     await ableton.song.set("record_mode", 1);

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
-const { execSync } = require('child_process');
-const path = require('path');
-const fs = require('fs');
+const { execSync } = require("child_process");
+const path = require("path");
+const fs = require("fs");
 
 const platform = process.platform;
 
@@ -10,18 +10,18 @@ const platform = process.platform;
  * Get the Ableton Remote Scripts directory based on the operating system
  */
 function getRemoteScriptsDir() {
-  if (platform === 'darwin') {
+  if (platform === "darwin") {
     // macOS
     return path.join(
       process.env.HOME,
-      'Music/Ableton/User Library/Remote Scripts'
+      "Music/Ableton/User Library/Remote Scripts"
     );
-  } else if (platform === 'win32') {
+  } else if (platform === "win32") {
     // Windows
     const userProfile = process.env.USERPROFILE;
     return path.join(
       userProfile,
-      'Documents/Ableton/User Library/Remote Scripts'
+      "Documents/Ableton/User Library/Remote Scripts"
     );
   } else {
     throw new Error(`Unsupported platform: ${platform}`);
@@ -41,19 +41,19 @@ function openDirectory(dir) {
   console.log(`📂 Opening Remote Scripts folder...\n${dir}\n`);
 
   try {
-    if (platform === 'darwin') {
+    if (platform === "darwin") {
       // macOS - use 'open' command
       execSync(`open "${dir}"`);
-    } else if (platform === 'win32') {
+    } else if (platform === "win32") {
       // Windows - use 'explorer' command
       execSync(`explorer "${dir}"`);
     } else {
       // Linux - try xdg-open
       execSync(`xdg-open "${dir}"`);
     }
-    console.log('✅ Folder opened successfully!');
+    console.log("✅ Folder opened successfully!");
   } catch (error) {
-    console.error('❌ Error opening folder:', error.message);
+    console.error("❌ Error opening folder:", error.message);
     console.log(`\nPlease manually navigate to: ${dir}`);
     process.exit(1);
   }
@@ -67,7 +67,7 @@ function main() {
     const remoteScriptsDir = getRemoteScriptsDir();
     openDirectory(remoteScriptsDir);
   } catch (error) {
-    console.error('❌ Error:', error.message);
+    console.error("❌ Error:", error.message);
     process.exit(1);
   }
 }

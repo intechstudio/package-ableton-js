@@ -15,7 +15,7 @@ exports.loadPackage = async function (gridController, persistedData) {
 
   const actionIconSvg = fs.readFileSync(
     path.resolve(__dirname, "ableton-js-black-logo.svg"),
-    { encoding: "utf-8" },
+    { encoding: "utf-8" }
   );
 
   // gridController.sendMessageToEditor({
@@ -72,12 +72,16 @@ exports.addMessagePort = async function (port, senderId) {
     port.on("message", (e) => {
       if (e.data.type === "install-midi-script") {
         try {
-          const scriptPath = path.join(__dirname, "scripts/copy-midi-script.js");
+          const scriptPath = path.join(
+            __dirname,
+            "scripts/copy-midi-script.js"
+          );
           execSync(`node "${scriptPath}"`, { stdio: "inherit" });
           port.postMessage({
             type: "midi-script-status",
             success: true,
-            message: "MIDI script installed successfully! Please restart Ableton.",
+            message:
+              "MIDI script installed successfully! Please restart Ableton.",
           });
         } catch (error) {
           console.error("Error installing MIDI script:", error);
@@ -91,7 +95,10 @@ exports.addMessagePort = async function (port, senderId) {
 
       if (e.data.type === "open-remote-scripts") {
         try {
-          const scriptPath = path.join(__dirname, "scripts/open-remote-scripts.js");
+          const scriptPath = path.join(
+            __dirname,
+            "scripts/open-remote-scripts.js"
+          );
           execSync(`node "${scriptPath}"`, { stdio: "inherit" });
         } catch (error) {
           console.error("Error opening Remote Scripts folder:", error);
@@ -100,7 +107,10 @@ exports.addMessagePort = async function (port, senderId) {
 
       if (e.data.type === "open-midi-script-source") {
         try {
-          const scriptPath = path.join(__dirname, "scripts/open-midi-script-source.js");
+          const scriptPath = path.join(
+            __dirname,
+            "scripts/open-midi-script-source.js"
+          );
           execSync(`node "${scriptPath}"`, { stdio: "inherit" });
         } catch (error) {
           console.error("Error opening MIDI script source:", error);
@@ -145,11 +155,11 @@ exports.sendMessage = async function (args) {
   const type = args[0];
 
   // v3 2025-11-03
-  if(type == "play_or_stop") {
-    ableton.playOrStop();   
+  if (type == "play_or_stop") {
+    ableton.playOrStop();
   }
-  if(type == "record"){
-    ableton.record()
+  if (type == "record") {
+    ableton.record();
   }
 
   // v2
