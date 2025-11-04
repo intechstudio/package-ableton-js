@@ -147,5 +147,14 @@
         </div>
       </BlockBody>
     </Block>
+    <Block>
+      <BlockTitle>v1: AbletonJS Selected Track Control</BlockTitle>
+      <BlockBody>
+        This very first version of AbletonJS enables selected track control with
+        a VSN1 module. Use profile <strong
+          >AbletonJS Selected Track Control</strong
+        > to try it out.
+      </BlockBody>
+    </Block>
   </div>
 </main-app>

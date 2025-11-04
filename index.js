@@ -13,10 +13,10 @@ const path = require("path");
 exports.loadPackage = async function (gridController, persistedData) {
   controller = gridController;
 
-  const actionIconSvg = fs.readFileSync(
-    path.resolve(__dirname, "ableton-js-black-logo.svg"),
-    { encoding: "utf-8" }
-  );
+  // const actionIconSvg = fs.readFileSync(
+  //   path.resolve(__dirname, "ableton-js-black-logo.svg"),
+  //   { encoding: "utf-8" }
+  // );
 
   // gridController.sendMessageToEditor({
   //   type: "add-action",
