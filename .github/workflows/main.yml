@@ -40,7 +40,7 @@ jobs:
           tag_name: ${{ needs.read-package-json.outputs.package_version}}
           release_name: Release ${{ needs.read-package-json.outputs.package_version}}
           body: |
-            Release of the Simple Overlay Package for the Grid Editor
+            Release of the Spotify Package for the Grid Editor
           draft: false
           prerelease: false
       - name: Save release output
@@ -54,8 +54,7 @@ jobs:
     needs: create-github-release
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    #        os: [macos-latest]
+        os: [ubuntu-latest, windows-latest]
 
     steps:
       - name: Checkout code
@@ -64,10 +63,16 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: 18 # Specify the desired Node.js version
+          node-version: 20.19.5 # Specify the desired Node.js version
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Build components
+        run: |
+          cd components
+          npm install
+          npm run build
 
       - name: Install archiver package
         run: npm install archiver
@@ -82,7 +87,7 @@ jobs:
         with:
           upload_url: ${{ needs.create-github-release.outputs.upload_url }}
           asset_path: package-archive.zip
-          asset_name: package-overlay-${{ matrix.os }}.zip
+          asset_name: package-ableton-js-${{ matrix.os }}.zip
           asset_content_type: application/zip
   publish-release:
     needs: [build, create-github-release]

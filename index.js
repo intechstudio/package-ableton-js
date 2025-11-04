@@ -7,30 +7,37 @@ let messagePorts = new Set();
 let windowMessagePort;
 
 const ableton = require("./src/index.js");
+const { execSync } = require("child_process");
+const path = require("path");
 
 exports.loadPackage = async function (gridController, persistedData) {
   controller = gridController;
 
-  gridController.sendMessageToEditor({
-    type: "add-action",
-    info: {
-      actionId: 0,
-      rendering: "standard",
-      category: "template",
-      color: "#5865F2",
-      icon: "<div />",
-      blockIcon: "<div />",
-      selectable: true,
-      movable: true,
-      hideIcon: false,
-      type: "single",
-      toggleable: true,
-      short: "xta",
-      displayName: "Template Action",
-      defaultLua: 'gps("package-ableton-js", val)',
-      actionComponent: "ableton-js-action",
-    },
-  });
+  const actionIconSvg = fs.readFileSync(
+    path.resolve(__dirname, "ableton-js-black-logo.svg"),
+    { encoding: "utf-8" },
+  );
+
+  // gridController.sendMessageToEditor({
+  //   type: "add-action",
+  //   info: {
+  //     actionId: 0,
+  //     rendering: "standard",
+  //     category: "template",
+  //     color: "#5865F2",
+  //     icon: actionIconSvg,
+  //     blockIcon: actionIconSvg,
+  //     selectable: true,
+  //     movable: true,
+  //     hideIcon: false,
+  //     type: "single",
+  //     toggleable: true,
+  //     short: "xta",
+  //     displayName: "Template Action",
+  //     defaultLua: 'gps("package-ableton-js", val)',
+  //     actionComponent: "ableton-js-action",
+  //   },
+  // });
 
   myFirstVariable = persistedData?.myFirstVariable ?? false;
 
@@ -63,6 +70,43 @@ exports.addMessagePort = async function (port, senderId) {
       preferenceMessagePort = undefined;
     });
     port.on("message", (e) => {
+      if (e.data.type === "install-midi-script") {
+        try {
+          const scriptPath = path.join(__dirname, "scripts/copy-midi-script.js");
+          execSync(`node "${scriptPath}"`, { stdio: "inherit" });
+          port.postMessage({
+            type: "midi-script-status",
+            success: true,
+            message: "MIDI script installed successfully! Please restart Ableton.",
+          });
+        } catch (error) {
+          console.error("Error installing MIDI script:", error);
+          port.postMessage({
+            type: "midi-script-status",
+            success: false,
+            message: "Error installing MIDI script. Check console for details.",
+          });
+        }
+      }
+
+      if (e.data.type === "open-remote-scripts") {
+        try {
+          const scriptPath = path.join(__dirname, "scripts/open-remote-scripts.js");
+          execSync(`node "${scriptPath}"`, { stdio: "inherit" });
+        } catch (error) {
+          console.error("Error opening Remote Scripts folder:", error);
+        }
+      }
+
+      if (e.data.type === "open-midi-script-source") {
+        try {
+          const scriptPath = path.join(__dirname, "scripts/open-midi-script-source.js");
+          execSync(`node "${scriptPath}"`, { stdio: "inherit" });
+        } catch (error) {
+          console.error("Error opening MIDI script source:", error);
+        }
+      }
+
       if (e.data.type === "offset") {
         const { track_offset, scene_offset } = e.data;
         ableton.setSessionBoxOffset(track_offset, scene_offset);

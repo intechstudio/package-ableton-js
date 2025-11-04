@@ -95,8 +95,10 @@ let activeTrackArmState;
 let activeTrackSoloState;
 // v3
 let activeTrackName;
+let masterTrack;
 function selectionListener() {
     return __awaiter(this, void 0, void 0, function* () {
+        masterTrack = yield ableton.song.get("master_track");
         unsubList.push(yield ableton.song.view.addListener("selected_parameter", (parameter) => __awaiter(this, void 0, void 0, function* () {
             if (parameter) {
                 const [min, max] = yield Promise.all([
@@ -144,25 +146,35 @@ function selectionListener() {
                     activeTrackPanningValue = v.toFixed(2);
                 }));
                 // track arm
+                // groups and master have no arm
                 if (yield track.get("can_be_armed")) {
                     activeTrackArmState = yield track.get("arm");
                     unsubList.push(yield track.addListener("arm", (data) => {
                         activeTrackArmState = data;
+                        // while on track, send down the changes
                         sendActivePropertyToGrid();
                     }));
                 }
                 // track mute
-                activeTrackMuteState = track.raw.mute;
-                unsubList.push(yield track.addListener("mute", (data) => {
-                    activeTrackMuteState = data;
-                    sendActivePropertyToGrid();
-                }));
+                // master does not have mute
+                if (track.raw.id !== masterTrack.raw.id) {
+                    activeTrackMuteState = track.raw.mute;
+                    unsubList.push(yield track.addListener("mute", (data) => {
+                        activeTrackMuteState = data;
+                        // while on track, send down the changes
+                        sendActivePropertyToGrid();
+                    }));
+                }
                 // track solo
-                activeTrackSoloState = track.raw.solo;
-                unsubList.push(yield track.addListener("solo", (data) => {
-                    activeTrackSoloState = data;
-                    sendActivePropertyToGrid();
-                }));
+                // master does not have solo
+                if (track.raw.id !== masterTrack.raw.id) {
+                    activeTrackSoloState = track.raw.solo;
+                    unsubList.push(yield track.addListener("solo", (data) => {
+                        activeTrackSoloState = data;
+                        // while on track, send down the changes
+                        sendActivePropertyToGrid();
+                    }));
+                }
                 activeTrackName = track.raw.name;
                 sendActivePropertyToGrid();
                 sendMessageToModule({
@@ -170,6 +182,12 @@ function selectionListener() {
                     tn: activeTrackName,
                     c: Array.from(hexToRgb(track.raw.color))
                 });
+                // update the session box when user clicks on a track in ableton
+                const allTracks = yield ableton.song.get("tracks");
+                const currentIndex = allTracks.findIndex((track) => track.raw.id === selectedTrack.raw.id);
+                if (currentIndex !== SESSION_RING.track_offset && currentIndex !== -1) {
+                    setSessionBoxOffset(currentIndex, SESSION_RING.scene_offset);
+                }
                 console.log(`${EVENT.VIEW_TRACK_RX} ${track.raw.name}, color: ${hexToRgb(track.raw.color)} solo: ${track.raw.solo}, mute: ${track.raw.mute}`);
             }
             else {
@@ -202,7 +220,9 @@ function autoSetActivePropertyValue(value) {
         }
         if (activeProperty == "lastTouched") {
             if (selectedParameter) {
-                selectedParameter.parameter.set("value", value);
+                if (selectedParameter.parameter) {
+                    selectedParameter.parameter.set("value", value);
+                }
             }
         }
     });
@@ -261,9 +281,8 @@ function sendActivePropertyToGrid() {
             });
         }
         if (activeProperty == "sends") {
-            console.log("ST_SEND ST_SEND", activeTrackSendValues);
             sendMessageToModule({
-                evt: "ST_SEND",
+                evt: "ST_SENDS",
                 ap: activePropertyIndex,
                 v: activeTrackSendValues, // sends an array! (table)
                 min: 0,
@@ -271,13 +290,16 @@ function sendActivePropertyToGrid() {
             });
         }
         if (activeProperty == "lastTouched") {
-            sendMessageToModule({
-                evt: "ST_LAST",
-                n: selectedParameter.parameter.raw.name,
-                v: selectedParameter.parameter.raw.value,
-                min: selectedParameter.min,
-                max: selectedParameter.max,
-            });
+            // while no parameter has been selected, but this is called, check first if selectedParameter even exists.
+            if (selectedParameter) {
+                sendMessageToModule({
+                    evt: "ST_LAST",
+                    n: selectedParameter.parameter.raw.name,
+                    v: selectedParameter.parameter.raw.value,
+                    min: selectedParameter.min,
+                    max: selectedParameter.max,
+                });
+            }
         }
         // track defaults
         sendMessageToModule({
@@ -292,7 +314,6 @@ function autoSetActiveProperty(prop, index) {
     return __awaiter(this, void 0, void 0, function* () {
         activeProperty = prop;
         activePropertyIndex = index;
-        console.log("autoSetActiveProperty", activeProperty, activePropertyIndex);
         // When property selection is triggered on Grid, send back to Grid the property details
         sendActivePropertyToGrid();
     });
@@ -341,10 +362,19 @@ function navigate(direction) {
         // Navigate
         const dir = direction == "right" ? 1 : -1;
         const nextIndex = Math.max(0, Math.min(currentIndex + dir, allTracks.length - 1));
-        yield ableton.song.view.set("selected_track", allTracks[nextIndex].raw.id);
-        // Update session box offset to follow the selected track
-        const newTrackOffset = Math.max(0, nextIndex - Math.floor(SESSION_RING.tracks / 2));
-        yield setSessionBoxOffset(newTrackOffset, SESSION_RING.scene_offset);
+        // navigation may go out of available tracks
+        try {
+            yield ableton.song.view.set("selected_track", allTracks[nextIndex].raw.id);
+            // Update session box offset to follow the selected track
+            // const newTrackOffset = Math.max(
+            //   0,
+            //   nextIndex - Math.floor(SESSION_RING.tracks / 2)
+            // );
+            yield setSessionBoxOffset(nextIndex, SESSION_RING.scene_offset);
+        }
+        catch (error) {
+            console.log("Next track is out of range.");
+        }
     });
 }
 function playOrStop() {

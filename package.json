@@ -1,8 +1,18 @@
 {
   "name": "package-ableton-js",
   "version": "1.0.0",
-  "description": "Control Ableton 11+ with Grid controllers.",
+  "description": "AbletonJS",
   "main": "index.js",
+  "files": [
+    "**/*.js",
+    "**/*.d.ts",
+    "midi-script/**/*.py",
+    "scripts/**/*.js",
+    "components/dist/**",
+    "dist/**",
+    "README.md",
+    "MIDI_SCRIPT_SETUP.md"
+  ],
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "format": "prettier --write .",
@@ -11,15 +21,24 @@
     "dev:components": "cd ./components && npm run dev",
     "dev:src": "nodemon",
     "build:src": "rimraf dist && tsc",
-    "postinstall": "run-p install:*",
+    "postinstall": "run-p install:* && node scripts/postinstall.js",
     "build": "run-p build:*",
-    "dev": "run-p dev:*"
+    "dev": "run-p dev:*",
+    "ableton:copy-midi-script": "node scripts/copy-midi-script.js",
+    "ableton:open-remote-scripts": "node scripts/open-remote-scripts.js",
+    "ableton:open-midi-script-source": "node scripts/open-midi-script-source.js",
+    "ableton:setup": "npm run ableton:copy-midi-script",
+    "prepare-midi-script": "node scripts/prepare-midi-script.js",
+    "prepublishOnly": "npm run prepare-midi-script"
   },
   "author": "",
   "license": "ISC",
   "grid_editor": {
     "componentsPath": "components/dist/components.js",
-    "preferenceComponent": "ableton-js-preferences"
+    "preferenceComponent": "ableton-js-preferences",
+    "shortDescription": "Control Ableton through the ableton-js package",
+    "mainIcon": "ableton-js-main-logo.svg",
+    "menuIcon": "ableton-js-white-logo.svg"
   },
   "devDependencies": {
     "nodemon": "^3.1.9",

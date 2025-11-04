@@ -97,8 +97,11 @@ let activeTrackSoloState;
 
 // v3
 let activeTrackName;
+let masterTrack: Track;
 
 async function selectionListener() {
+  masterTrack = await ableton.song.get("master_track");
+
   unsubList.push(
     await ableton.song.view.addListener(
       "selected_parameter",
@@ -168,33 +171,43 @@ async function selectionListener() {
         );
 
         // track arm
+        // groups and master have no arm
         if (await track.get("can_be_armed")) {
           activeTrackArmState = await track.get("arm");
           unsubList.push(
             await track.addListener("arm", (data) => {
               activeTrackArmState = data;
+              // while on track, send down the changes
               sendActivePropertyToGrid();
             })
           )
         }
 
         // track mute
-        activeTrackMuteState = track.raw.mute;
-        unsubList.push(
-          await track.addListener("mute", (data)=> {
-            activeTrackMuteState = data;
-            sendActivePropertyToGrid();
-          })
-        )
+        // master does not have mute
+        if(track.raw.id !== masterTrack.raw.id) {
+          activeTrackMuteState = track.raw.mute;
+          unsubList.push(
+            await track.addListener("mute", (data)=> {
+              activeTrackMuteState = data;
+              // while on track, send down the changes
+              sendActivePropertyToGrid();
+            })
+          )
+        }
 
         // track solo
-        activeTrackSoloState = track.raw.solo;
-        unsubList.push(
-          await track.addListener("solo", (data)=> {
-            activeTrackSoloState = data;
-            sendActivePropertyToGrid();
-          })
-        )
+        // master does not have solo
+        if(track.raw.id !== masterTrack.raw.id) {
+          activeTrackSoloState = track.raw.solo;
+          unsubList.push(
+            await track.addListener("solo", (data)=> {
+              activeTrackSoloState = data;
+              // while on track, send down the changes
+              sendActivePropertyToGrid();
+            })
+          )
+        }
 
         activeTrackName = track.raw.name
         sendActivePropertyToGrid();
@@ -206,6 +219,15 @@ async function selectionListener() {
             track.raw.color
           ))
         })
+
+        // update the session box when user clicks on a track in ableton
+        const allTracks = await ableton.song.get("tracks");
+        const currentIndex = allTracks.findIndex(
+          (track) => track.raw.id === selectedTrack.raw.id
+        ); 
+        if(currentIndex !== SESSION_RING.track_offset && currentIndex !== -1){
+          setSessionBoxOffset(currentIndex, SESSION_RING.scene_offset);
+        } 
 
         console.log(
           `${EVENT.VIEW_TRACK_RX} ${track.raw.name}, color: ${hexToRgb(
@@ -303,9 +325,8 @@ async function sendActivePropertyToGrid() {
     });
   }
   if (activeProperty == "sends") {
-    console.log("ST_SEND ST_SEND", activeTrackSendValues)
     sendMessageToModule({
-      evt: "ST_SEND",
+      evt: "ST_SENDS",
       ap: activePropertyIndex,
       v: activeTrackSendValues, // sends an array! (table)
       min: 0,
@@ -314,13 +335,16 @@ async function sendActivePropertyToGrid() {
   }
 
   if (activeProperty == "lastTouched") {
-    sendMessageToModule({
-      evt: "ST_LAST",
-      n: selectedParameter.parameter.raw.name,
-      v: selectedParameter.parameter.raw.value,
-      min: selectedParameter.min,
-      max: selectedParameter.max,
-    });
+    // while no parameter has been selected, but this is called, check first if selectedParameter even exists.
+    if(selectedParameter){
+      sendMessageToModule({
+        evt: "ST_LAST",
+        n: selectedParameter.parameter.raw.name,
+        v: selectedParameter.parameter.raw.value,
+        min: selectedParameter.min,
+        max: selectedParameter.max,
+      });
+    }
   }
 
   // track defaults
@@ -334,7 +358,6 @@ async function sendActivePropertyToGrid() {
 export async function autoSetActiveProperty(prop: string, index: number) {
   activeProperty = prop;
   activePropertyIndex = index;
-  console.log("autoSetActiveProperty", activeProperty, activePropertyIndex);
   // When property selection is triggered on Grid, send back to Grid the property details
   sendActivePropertyToGrid();
 }
@@ -390,14 +413,20 @@ export async function navigate(direction: string) {
     0,
     Math.min(currentIndex + dir, allTracks.length - 1)
   );
-  await ableton.song.view.set("selected_track", allTracks[nextIndex].raw.id);
 
-  // Update session box offset to follow the selected track
-  const newTrackOffset = Math.max(
-    0,
-    nextIndex - Math.floor(SESSION_RING.tracks / 2)
-  );
-  await setSessionBoxOffset(newTrackOffset, SESSION_RING.scene_offset);
+  // navigation may go out of available tracks
+  try {
+    await ableton.song.view.set("selected_track", allTracks[nextIndex].raw.id);
+    // Update session box offset to follow the selected track
+    // const newTrackOffset = Math.max(
+    //   0,
+    //   nextIndex - Math.floor(SESSION_RING.tracks / 2)
+    // );
+    await setSessionBoxOffset(nextIndex, SESSION_RING.scene_offset);
+  } catch (error) {
+    console.log("Next track is out of range.")
+  }
+  
 }
 
 export async function playOrStop(){
