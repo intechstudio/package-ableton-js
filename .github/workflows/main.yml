@@ -54,7 +54,7 @@ jobs:
     needs: create-github-release
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [macos-latest, windows-latest]
 
     steps:
       - name: Checkout code
