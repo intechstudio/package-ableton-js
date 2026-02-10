@@ -119,7 +119,7 @@ exports.addMessagePort = async function (port, senderId) {
 
       if (e.data.type === "offset") {
         const { track_offset, scene_offset } = e.data;
-        ableton.setSessionBoxOffset(track_offset, scene_offset);
+        ableton.ringSetOffset(track_offset, scene_offset);
       }
 
       if (e.data.type === "set-setting") {
@@ -150,59 +150,26 @@ async function sendImmediate(dx, dy, script) {
   });
 }
 
-exports.sendMessage = async function (args) {
-  console.log("sendMessage", args);
-  const type = args[0];
+// Command dispatch table — O(1) lookup instead of sequential if-chain
+const commandMap = {
+  play_or_stop: (args) => ableton.playOrStop(),
+  record: (args) => ableton.record(),
+  navigate: (args) => ableton.navigate(args[1]),
+  ring_setup: (args) => ableton.ringSetup(args[1], args[2], args[3], args[4]),
+  ring_set_offset: (args) => ableton.ringSetOffset(args[1], args[2]),
+  ring_navigate: (args) => ableton.ringNavigate(args[1]),
+  ring_toggle_mute: (args) => ableton.ringToggleMute(args[1]),
+  ring_toggle_solo: (args) => ableton.ringToggleSolo(args[1]),
+  ring_toggle_arm: (args) => ableton.ringToggleArm(args[1]),
+  ring_set_volume: (args) => ableton.ringSetVolume(args[1], args[2]),
+  ring_set_panning: (args) => ableton.ringSetPanning(args[1], args[2]),
+  ring_set_send: (args) => ableton.ringSetSend(args[1], args[2], args[3]),
+  ring_select_track: (args) => ableton.ringSelectTrack(args[1]),
+};
 
-  // v3 2025-11-03
-  if (type == "play_or_stop") {
-    ableton.playOrStop();
-  }
-  if (type == "record") {
-    ableton.record();
-  }
-
-  // v2
-  if (type == "set_active_property") {
-    ableton.autoSetActiveProperty(args[1], args[2]);
-  }
-  if (type == "set_active_property_value") {
-    ableton.autoSetActivePropertyValue(args[1]);
-  }
-  if (type == "selected_track_arm_mute_solo") {
-    ableton.autoSetActiveTrackArmMuteSolo(args[1]);
-  }
-  if (type == "reset_active_property") {
-    ableton.autoResetActiveProperty();
-  }
-  if (type == "navigate") {
-    ableton.navigate(args[1]);
-  }
-
-  // v1
-  if (type == "selected_track_volume") {
-    ableton.autoSetSelectedTrackMixerDeviceVolume(args[1]);
-  }
-  if (type == "selected_track_panning") {
-    ableton.autoSetSelectedTrackMixerDevicePanning(args[1]);
-  }
-  if (type == "selected_track_send") {
-    ableton.autoSetSelectedTrackMixerDeviceSend(args[1], args[2]);
-  }
-
-  // v0
-  if (args[0] == "launch-clip") {
-    launchClip(args[1], args[2]);
-  }
-  if (args[0] == "session-scroll") {
-    sessionScroll(args[1]);
-  }
-  if (args[0] == "launch-scene") {
-    launchScene(args[1]);
-  }
-  if (args[0] == "fire-scene") {
-    fireSelectedScene();
-  }
+exports.sendMessage = function (args) {
+  const handler = commandMap[args[0]];
+  if (handler) handler(args);
 };
 
 function notifyStatusChange() {

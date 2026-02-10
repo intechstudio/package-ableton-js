@@ -1,430 +1,35 @@
 import { Ableton } from "ableton-js";
-import { NavDirection } from "ableton-js/ns/application-view";
-import { ClipSlot } from "ableton-js/ns/clip-slot";
-import { Device } from "ableton-js/ns/device";
-import { DeviceParameter } from "ableton-js/ns/device-parameter";
-import { MixerDevice } from "ableton-js/ns/mixer-device";
-import { Scene } from "ableton-js/ns/scene";
-import { Track } from "ableton-js/ns/track";
+import { RingManager } from "./ring-manager";
 
-// Log all messages to the console
 const ableton = new Ableton({ logger: console });
-
-interface SessionRing {
-  tracks: number;
-  scenes: number;
-  scene_offset: number;
-  track_offset: number;
-}
-
-let SESSION_RING: SessionRing = {
-  tracks: 0,
-  scenes: 0,
-  scene_offset: 0,
-  track_offset: 0,
-};
-
-let unsubList: (() => Promise<boolean | undefined>)[] = [];
 
 let sendMessageToModule: (
   args: any[] | { [key: string]: any }
 ) => void = () => {};
 
+let ringManager: RingManager | undefined = undefined;
+
 export async function init(sendMessage) {
   await ableton.start();
-  setupSessionBox(1, 8);
-  selectionListener();
   sendMessageToModule = sendMessage;
+
+  ringManager = new RingManager(ableton, sendMessage);
+  await ringManager.init();
+  // Default ring: 1 track wide, 8 scenes. Grid can reconfigure via ring_setup.
+  await ringManager.setupRing(1, 8);
 }
 
 export async function close() {
+  if (ringManager) {
+    await ringManager.destroy();
+    ringManager = undefined;
+  }
   await ableton.close();
-  unsubList.forEach((e) => e());
 }
 
-export async function setupSessionBox(num_tracks: number, num_scenes: number) {
-  SESSION_RING.tracks = num_tracks;
-  SESSION_RING.scenes = num_scenes;
-  ableton.session.setupSessionBox(num_tracks, num_scenes);
-}
-
-export async function setSessionBoxOffset(
-  track_offset: number,
-  scene_offset: number
-) {
-  SESSION_RING.track_offset = track_offset;
-  SESSION_RING.scene_offset = scene_offset;
-  ableton.session.setSessionOffset(track_offset, scene_offset);
-}
-
-enum EVENT {
-  COLOR = "COLOR",
-  CLIP_EXISTS = "CLIP_EXISTS",
-  CLIP_TRIGGERING = "CLIP_TRIGGERING",
-  CLIP_PLAYING = "CLIP_PLAYING",
-  MIXER_VOLUME_RX = "MIXER_VOLUME_RX",
-  MIXER_VOLUME_TX = "MIXER_VOLUME_TX",
-  MIXER_PAN_RX = "MIXER_PAN_RX",
-  MIXER_PAN_TX = "MIXER_PAN_TX",
-  MIXER_SEND_TX = "MIXER_SEND_TX",
-  MIXER_SEND_RX = "MIXER_SEND_RX",
-  TRACK_ARM_TX = "TRACK_ARM_TX",
-  TRACK_ARM_RX = "TRACK_ARM_RX",
-  TRACK_SOLO_TX = "TRACK_SOLO_TX",
-  TRACK_SOLO_RX = "TRACK_SOLO_RX",
-  TRACK_MUTE_TX = "TRACK_MUTE_TX",
-  TRACK_MUTE_RX = "TRACK_MUTE_RX",
-  TRACK_VIEW_SELECTED_DEVICE_TX = "TRACK_VIEW_SELECTED_DEVICE_TX",
-  VIEW_PARAMETER_RX = "VIEW_PARAMETER_RX",
-  VIEW_PARAMETER_TX = "VIEW_PARAMETER_TX",
-  VIEW_TRACK_RX = "VIEW_TRACK_RX",
-  VIEW_TRACK_TX = "VIEW_TRACK_TX",
-}
-
-let selectedTrack: Track | undefined = undefined;
-let selectedTrackMixerDevice: MixerDevice | undefined = undefined;
-let selectedParameter:
-  | { parameter: DeviceParameter; min: number; max: number }
-  | undefined = undefined;
-
-// v2
-let activeTrackSendValues = [];
-let activeTrackVolumeValue;
-let activeTrackPanningValue;
-let activeTrackMuteState;
-let activeTrackArmState;
-let activeTrackSoloState;
-
-// v3
-let activeTrackName;
-let masterTrack: Track;
-
-async function selectionListener() {
-  masterTrack = await ableton.song.get("master_track");
-
-  unsubList.push(
-    await ableton.song.view.addListener(
-      "selected_parameter",
-      async (parameter) => {
-        if (parameter) {
-          const [min, max] = await Promise.all([
-            parameter.get("min"),
-            parameter.get("max"),
-          ]);
-          selectedParameter = {
-            parameter,
-            min,
-            max,
-          };
-          sendActivePropertyToGrid();
-          console.log(
-            EVENT.VIEW_PARAMETER_RX,
-            parameter.raw.name,
-            parameter.raw.value,
-            min,
-            max
-          );
-        } else {
-          console.log(EVENT.VIEW_PARAMETER_RX, null);
-        }
-      }
-    )
-  );
-
-  unsubList.push(
-    await ableton.song.view.addListener("selected_track", async (track) => {
-      if (track) {
-        selectedTrack = track;
-        const mixerDevice = await track.get("mixer_device");
-        selectedTrackMixerDevice = mixerDevice;
-
-        // master channel has no sends!
-        // sends!
-        const sends = await mixerDevice.get("sends");
-        if (sends.length > 0) {
-          sends.forEach(async (send, index) => {
-            activeTrackSendValues[index] = await send.raw.value.toFixed(2);
-            unsubList.push(
-              await send.addListener("value", (v) => {
-                activeTrackSendValues[index] = v.toFixed(2);
-              })
-            );
-          });
-        }
-
-        // volume (fader)
-        const volume = await mixerDevice.get("volume");
-        activeTrackVolumeValue = volume.raw.value.toFixed(2);
-        unsubList.push(
-          await volume.addListener("value", (v) => {
-            activeTrackVolumeValue = v.toFixed(2);
-          })
-        );
-
-        //  panning
-        const panning = await mixerDevice.get("panning");
-        activeTrackPanningValue = panning.raw.value.toFixed(2);
-        unsubList.push(
-          await panning.addListener("value", (v) => {
-            activeTrackPanningValue = v.toFixed(2);
-          })
-        );
-
-        // track arm
-        // groups and master have no arm
-        if (await track.get("can_be_armed")) {
-          activeTrackArmState = await track.get("arm");
-          unsubList.push(
-            await track.addListener("arm", (data) => {
-              activeTrackArmState = data;
-              // while on track, send down the changes
-              sendActivePropertyToGrid();
-            })
-          );
-        }
-
-        // track mute
-        // master does not have mute
-        if (track.raw.id !== masterTrack.raw.id) {
-          activeTrackMuteState = track.raw.mute;
-          unsubList.push(
-            await track.addListener("mute", (data) => {
-              activeTrackMuteState = data;
-              // while on track, send down the changes
-              sendActivePropertyToGrid();
-            })
-          );
-        }
-
-        // track solo
-        // master does not have solo
-        if (track.raw.id !== masterTrack.raw.id) {
-          activeTrackSoloState = track.raw.solo;
-          unsubList.push(
-            await track.addListener("solo", (data) => {
-              activeTrackSoloState = data;
-              // while on track, send down the changes
-              sendActivePropertyToGrid();
-            })
-          );
-        }
-
-        activeTrackName = track.raw.name;
-        sendActivePropertyToGrid();
-
-        sendMessageToModule({
-          gui: true,
-          tn: activeTrackName,
-          c: Array.from(hexToRgb(track.raw.color)),
-        });
-
-        // update the session box when user clicks on a track in ableton
-        const allTracks = await ableton.song.get("tracks");
-        const currentIndex = allTracks.findIndex(
-          (track) => track.raw.id === selectedTrack.raw.id
-        );
-        if (currentIndex !== SESSION_RING.track_offset && currentIndex !== -1) {
-          setSessionBoxOffset(currentIndex, SESSION_RING.scene_offset);
-        }
-
-        console.log(
-          `${EVENT.VIEW_TRACK_RX} ${track.raw.name}, color: ${hexToRgb(
-            track.raw.color
-          )} solo: ${track.raw.solo}, mute: ${track.raw.mute}`
-        );
-      } else {
-        console.log(EVENT.VIEW_TRACK_RX, null);
-      }
-    })
-  );
-}
-
-export async function autoSetActivePropertyValue(value: number) {
-  if (selectedTrackMixerDevice) {
-    if (activeProperty == "volume") {
-      selectedTrackMixerDevice.get(activeProperty).then((prop) => {
-        prop.set("value", value);
-      });
-    }
-    if (activeProperty == "panning") {
-      selectedTrackMixerDevice.get(activeProperty).then((prop) => {
-        prop.set("value", value);
-      });
-    }
-    if (activeProperty == "sends") {
-      const sends = await selectedTrackMixerDevice.get(activeProperty);
-      if (sends.length && activePropertyIndex !== undefined) {
-        selectedTrackMixerDevice.get(activeProperty).then((props) => {
-          props[activePropertyIndex].set("value", value);
-        });
-      }
-    }
-  }
-  if (activeProperty == "lastTouched") {
-    if (selectedParameter) {
-      if (selectedParameter.parameter) {
-        selectedParameter.parameter.set("value", value);
-      }
-    }
-  }
-}
-
-export async function autoResetActiveProperty() {
-  if (selectedTrackMixerDevice) {
-    if (activeProperty == "volume") {
-      const prop = await selectedTrackMixerDevice.get(activeProperty);
-      const defaultPropValue = await prop.get("default_value");
-      prop.set("value", Number(defaultPropValue));
-    }
-    if (activeProperty == "panning") {
-      const prop = await selectedTrackMixerDevice.get(activeProperty);
-      const defaultPropValue = await prop.get("default_value");
-      prop.set("value", Number(defaultPropValue));
-    }
-    if (activeProperty == "sends") {
-      const sends = await selectedTrackMixerDevice.get(activeProperty);
-      if (sends.length && activePropertyIndex !== undefined) {
-        const defaultPropValue = await sends[0].get("default_value");
-        selectedTrackMixerDevice.get(activeProperty).then((props) => {
-          props[activePropertyIndex].set("value", Number(defaultPropValue));
-        });
-      }
-    }
-  }
-  if (activeProperty == "lastTouched") {
-    if (selectedParameter) {
-      const defaultPropValue = await selectedParameter.parameter.get(
-        "default_value"
-      );
-      if (defaultPropValue) {
-        selectedParameter.parameter.set("value", Number(defaultPropValue));
-      }
-    }
-  }
-}
-
-let activeProperty: string | undefined = undefined;
-let activePropertyIndex: number | undefined = undefined;
-async function sendActivePropertyToGrid() {
-  if (activeProperty == "volume") {
-    sendMessageToModule({
-      evt: "ST_VOL",
-      v: activeTrackVolumeValue,
-      min: 0,
-      max: 1,
-    });
-  }
-  if (activeProperty == "panning") {
-    sendMessageToModule({
-      evt: "ST_PAN",
-      v: activeTrackPanningValue,
-      min: -1,
-      max: 1,
-    });
-  }
-  if (activeProperty == "sends") {
-    sendMessageToModule({
-      evt: "ST_SENDS",
-      ap: activePropertyIndex,
-      v: activeTrackSendValues, // sends an array! (table)
-      min: 0,
-      max: 1,
-    });
-  }
-
-  if (activeProperty == "lastTouched") {
-    // while no parameter has been selected, but this is called, check first if selectedParameter even exists.
-    if (selectedParameter) {
-      sendMessageToModule({
-        evt: "ST_LAST",
-        n: selectedParameter.parameter.raw.name,
-        v: selectedParameter.parameter.raw.value,
-        min: selectedParameter.min,
-        max: selectedParameter.max,
-      });
-    }
-  }
-
-  // track defaults
-  sendMessageToModule({
-    evt: "ST_DEFAULT",
-    a: activeTrackArmState,
-    s: activeTrackSoloState,
-    m: activeTrackMuteState,
-  });
-}
-export async function autoSetActiveProperty(prop: string, index: number) {
-  activeProperty = prop;
-  activePropertyIndex = index;
-  // When property selection is triggered on Grid, send back to Grid the property details
-  sendActivePropertyToGrid();
-}
-
-// set arm, mute or solo
-export async function autoSetActiveTrackArmMuteSolo(
-  property: "arm" | "mute" | "solo"
-) {
-  if (selectedTrack) {
-    let currentState;
-    // groups, returns and master has no arm!
-    if (property == "arm") {
-      const can_be_armed = await selectedTrack.get("can_be_armed");
-      if (can_be_armed) {
-        currentState = await selectedTrack.get(property);
-        selectedTrack.set(property, !currentState);
-      }
-    } else {
-      currentState = await selectedTrack.get(property);
-      selectedTrack.set(property, !currentState);
-    }
-
-    if (property == "arm") {
-      activeTrackArmState = !currentState;
-    }
-    if (property == "mute") {
-      activeTrackMuteState = !currentState;
-    }
-    if (property == "solo") {
-      activeTrackSoloState = !currentState;
-    }
-    sendMessageToModule({
-      evt: "ST_DEFAULT",
-      a: activeTrackArmState,
-      s: activeTrackSoloState,
-      m: activeTrackMuteState,
-    });
-  }
-}
-
-export async function navigate(direction: string) {
-  const currentTrack = await ableton.song.view.get("selected_track");
-  const allTracks = await ableton.song.get("tracks");
-
-  // Find current track index
-  const currentIndex = allTracks.findIndex(
-    (track) => track.raw.id === currentTrack.raw.id
-  );
-
-  // Navigate
-  const dir = direction == "right" ? 1 : -1;
-  const nextIndex = Math.max(
-    0,
-    Math.min(currentIndex + dir, allTracks.length - 1)
-  );
-
-  // navigation may go out of available tracks
-  try {
-    await ableton.song.view.set("selected_track", allTracks[nextIndex].raw.id);
-    // Update session box offset to follow the selected track
-    // const newTrackOffset = Math.max(
-    //   0,
-    //   nextIndex - Math.floor(SESSION_RING.tracks / 2)
-    // );
-    await setSessionBoxOffset(nextIndex, SESSION_RING.scene_offset);
-  } catch (error) {
-    console.log("Next track is out of range.");
-  }
-}
+// ---------------------------------------------------------------------------
+// Transport
+// ---------------------------------------------------------------------------
 
 export async function playOrStop() {
   const isPlaying = await ableton.song.get("is_playing");
@@ -444,10 +49,99 @@ export async function record() {
   }
 }
 
-function hexToRgb(hex) {
-  var bigint = parseInt(hex, 16);
-  var r = (bigint >> 16) & 255;
-  var g = (bigint >> 8) & 255;
-  var b = bigint & 255;
-  return [r, g, b];
+/**
+ * Navigate selected track left/right. The ring manager auto-follows
+ * via its own selected_track listener.
+ */
+export async function navigate(direction: string) {
+  const currentTrack = await ableton.song.view.get("selected_track");
+  const allTracks = await ableton.song.get("tracks");
+
+  const currentIndex = allTracks.findIndex(
+    (track) => track.raw.id === currentTrack.raw.id
+  );
+
+  const dir = direction === "right" ? 1 : -1;
+  const nextIndex = Math.max(
+    0,
+    Math.min(currentIndex + dir, allTracks.length - 1)
+  );
+
+  try {
+    await ableton.song.view.set("selected_track", allTracks[nextIndex].raw.id);
+  } catch (error) {
+    console.log("Next track is out of range.");
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Ring manager exports — called from index.js via gps() commands from Grid
+// ---------------------------------------------------------------------------
+
+/** Set up the ring dimensions and initial offset. */
+export async function ringSetup(
+  numTracks: number,
+  numScenes: number,
+  trackOffset = 0,
+  sceneOffset = 0
+) {
+  if (ringManager) {
+    await ringManager.setupRing(numTracks, numScenes, trackOffset, sceneOffset);
+  }
+}
+
+/** Move the ring offset to an absolute position. */
+export async function ringSetOffset(
+  trackOffset: number,
+  sceneOffset: number
+) {
+  if (ringManager) {
+    await ringManager.setOffset(trackOffset, sceneOffset);
+  }
+}
+
+/** Move the ring left or right by 1 track. */
+export async function ringNavigate(direction: "left" | "right") {
+  if (ringManager) {
+    await ringManager.navigateRing(direction);
+  }
+}
+
+/** Toggle mute on the track at ring index. */
+export function ringToggleMute(ringIndex: number) {
+  ringManager?.toggleMute(ringIndex);
+}
+
+/** Toggle solo on the track at ring index. */
+export function ringToggleSolo(ringIndex: number) {
+  ringManager?.toggleSolo(ringIndex);
+}
+
+/** Toggle arm on the track at ring index. */
+export function ringToggleArm(ringIndex: number) {
+  ringManager?.toggleArm(ringIndex);
+}
+
+/** Set volume on the track at ring index (0..1). */
+export function ringSetVolume(ringIndex: number, value: number) {
+  ringManager?.setVolume(ringIndex, value);
+}
+
+/** Set panning on the track at ring index (-1..1). */
+export function ringSetPanning(ringIndex: number, value: number) {
+  ringManager?.setPanning(ringIndex, value);
+}
+
+/** Set a send value on the track at ring index. */
+export function ringSetSend(
+  ringIndex: number,
+  sendIndex: number,
+  value: number
+) {
+  ringManager?.setSend(ringIndex, sendIndex, value);
+}
+
+/** Select the track at ring index in Ableton (without moving the ring). */
+export function ringSelectTrack(ringIndex: number) {
+  ringManager?.selectTrackInRing(ringIndex);
 }
