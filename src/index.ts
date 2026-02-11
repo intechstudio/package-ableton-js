@@ -167,6 +167,11 @@ export function adjustSelectedParameter(delta: number, stepSize?: number) {
   ringManager?.adjustSelectedParameter(delta, stepSize);
 }
 
+/** Reset the selected parameter to its default value. */
+export function resetSelectedParameter() {
+  ringManager?.resetSelectedParameter();
+}
+
 /** Request a full state dump (ring tracks, selected track, selected parameter). */
 export async function requestFullState() {
   await ringManager?.requestFullState();

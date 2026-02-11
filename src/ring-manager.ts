@@ -103,6 +103,7 @@ export class RingManager {
   private selectedParamValue: number = 0;
   private selectedParamMin: number = 0;
   private selectedParamMax: number = 1;
+  private selectedParamDefault: number = 0;
 
   /** Guard: true while onSelectedParameterChanged is fetching min/max.
    *  Blocks adjustSelectedParameter to prevent stale-range writes. */
@@ -343,10 +344,53 @@ export class RingManager {
 
   /**
    * Set the active property that `setActivePropertyValue` will target.
-   * Supported values: \"volume\", \"panning\", \"send:N\", \"selected_parameter\".
+   * Supported values: "volume", "panning", "send:N", "selected_parameter".
+   * Immediately pushes the current values for the new property to Grid.
    */
   setActiveProperty(property: string): void {
     this.activeProperty = property;
+    this.sendActivePropertyState();
+  }
+
+  /**
+   * Push the current value(s) of the active property to Grid,
+   * so the hardware can update its display/encoder on mode switch.
+   */
+  private sendActivePropertyState(): void {
+    if (this.activeProperty === "selected_parameter") {
+      // Push selected parameter info
+      if (this.selectedParam) {
+        const range = this.selectedParamMax - this.selectedParamMin;
+        this.sendMessage({
+          evt: "RT_PARAM",
+          name: this.selectedParamName,
+          v: this.selectedParamValue,
+          nv: range !== 0 ? (this.selectedParamValue - this.selectedParamMin) / range : 0,
+          min: this.selectedParamMin,
+          max: this.selectedParamMax,
+        });
+      } else {
+        this.sendMessage({ evt: "RT_PARAM", name: "", v: 0, nv: 0, min: 0, max: 1 });
+      }
+    } else {
+      // Push the active property for all ring tracks
+      for (const trackId of this.currentRingTrackIds) {
+        const state = this.trackStates.get(trackId);
+        if (!state) continue;
+        const i = this.ringIndexByTrackId.get(trackId) ?? 0;
+
+        if (this.activeProperty === "volume" && !state.isMidi) {
+          this.sendMessage({ evt: "RT_VOL", i, v: state.volume, nv: state.volume });
+        } else if (this.activeProperty === "panning" && !state.isMidi) {
+          this.sendMessage({ evt: "RT_PAN", i, v: state.panning, nv: (state.panning + 1) / 2 });
+        } else if (this.activeProperty.startsWith("send:")) {
+          const si = parseInt(this.activeProperty.slice(5), 10);
+          if (!isNaN(si) && si < state.sends.length) {
+            this.sendMessage({ evt: "RT_SEND", i, si, v: state.sends[si], nv: state.sends[si] });
+          }
+        }
+      }
+    }
   }
 
   /**
@@ -454,18 +498,20 @@ export class RingManager {
       this.selectedParamValue = 0;
       this.selectedParamMin = 0;
       this.selectedParamMax = 1;
+      this.selectedParamDefault = 0;
       this.selectedParamSwitching = false;
       this.sendMessage({ evt: "RT_PARAM", name: "", v: 0, nv: 0, min: 0, max: 1 });
       return;
     }
 
     try {
-      // Fetch name, value, min, max in parallel
-      const [name, value, min, max] = await Promise.all([
+      // Fetch name, value, min, max, default in parallel
+      const [name, value, min, max, defaultVal] = await Promise.all([
         param.get("name"),
         param.get("value"),
         param.get("min"),
         param.get("max"),
+        param.get("default_value"),
       ]);
 
       // Update all cached state atomically before unblocking
@@ -474,6 +520,7 @@ export class RingManager {
       this.selectedParamValue = value;
       this.selectedParamMin = min;
       this.selectedParamMax = max;
+      this.selectedParamDefault = typeof defaultVal === "number" ? defaultVal : parseFloat(defaultVal) || 0;
 
       // Listen to value changes (e.g. automation, other controllers)
       await this.globalSubs.add(
@@ -529,6 +576,24 @@ export class RingManager {
       console.warn("[RingManager] Failed to set selected parameter value:", err);
     }
     // The value listener will update selectedParamValue and push RT_PARAM
+  }
+
+  /**
+   * Reset the selected parameter to its default value.
+   */
+  resetSelectedParameter(): void {
+    if (!this.selectedParam || this.selectedParamSwitching) return;
+
+    const value = Math.max(
+      this.selectedParamMin,
+      Math.min(this.selectedParamMax, this.selectedParamDefault)
+    );
+
+    try {
+      this.selectedParam.set("value", value);
+    } catch (err) {
+      console.warn("[RingManager] Failed to reset selected parameter:", err);
+    }
   }
 
   // -----------------------------------------------------------------------

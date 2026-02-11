@@ -169,6 +169,7 @@ const commandMap = {
   ring_set_active_property_value: (args) => ableton.ringSetActivePropertyValue(args[1], args[2]),
   ring_adjust_active_property_value: (args) => ableton.ringAdjustActivePropertyValue(args[1], args[2], args[3]),
   adjust_selected_parameter: (args) => ableton.adjustSelectedParameter(args[1], args[2]),
+  reset_selected_parameter: (args) => ableton.resetSelectedParameter(),
   request_full_state: (args) => ableton.requestFullState(),
 };
 

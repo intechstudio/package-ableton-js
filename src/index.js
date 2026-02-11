@@ -28,6 +28,7 @@ exports.ringSetActiveProperty = ringSetActiveProperty;
 exports.ringSetActivePropertyValue = ringSetActivePropertyValue;
 exports.ringAdjustActivePropertyValue = ringAdjustActivePropertyValue;
 exports.adjustSelectedParameter = adjustSelectedParameter;
+exports.resetSelectedParameter = resetSelectedParameter;
 exports.requestFullState = requestFullState;
 const ableton_js_1 = require("ableton-js");
 const ring_manager_1 = require("./ring-manager");
@@ -168,6 +169,10 @@ function ringAdjustActivePropertyValue(ringIndex, delta, stepSize) {
 /** Adjust the last-selected parameter in Ableton by a relative delta. */
 function adjustSelectedParameter(delta, stepSize) {
     ringManager === null || ringManager === void 0 ? void 0 : ringManager.adjustSelectedParameter(delta, stepSize);
+}
+/** Reset the selected parameter to its default value. */
+function resetSelectedParameter() {
+    ringManager === null || ringManager === void 0 ? void 0 : ringManager.resetSelectedParameter();
 }
 /** Request a full state dump (ring tracks, selected track, selected parameter). */
 function requestFullState() {
