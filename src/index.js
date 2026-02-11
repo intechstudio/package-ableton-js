@@ -24,6 +24,11 @@ exports.ringSetVolume = ringSetVolume;
 exports.ringSetPanning = ringSetPanning;
 exports.ringSetSend = ringSetSend;
 exports.ringSelectTrack = ringSelectTrack;
+exports.ringSetActiveProperty = ringSetActiveProperty;
+exports.ringSetActivePropertyValue = ringSetActivePropertyValue;
+exports.ringAdjustActivePropertyValue = ringAdjustActivePropertyValue;
+exports.adjustSelectedParameter = adjustSelectedParameter;
+exports.requestFullState = requestFullState;
 const ableton_js_1 = require("ableton-js");
 const ring_manager_1 = require("./ring-manager");
 const ableton = new ableton_js_1.Ableton({ logger: console });
@@ -146,4 +151,27 @@ function ringSetSend(ringIndex, sendIndex, value) {
 /** Select the track at ring index in Ableton (without moving the ring). */
 function ringSelectTrack(ringIndex) {
     ringManager === null || ringManager === void 0 ? void 0 : ringManager.selectTrackInRing(ringIndex);
+}
+/** Set the active property mode ("volume", "panning", "send:N"). */
+function ringSetActiveProperty(property) {
+    ringManager === null || ringManager === void 0 ? void 0 : ringManager.setActiveProperty(property);
+}
+/** Set the active property's value from a raw 8-bit Grid value (0–255). */
+function ringSetActivePropertyValue(ringIndex, rawValue) {
+    ringManager === null || ringManager === void 0 ? void 0 : ringManager.setActivePropertyValue(ringIndex, rawValue);
+}
+/** Adjust the active property by a relative delta (for encoders in relative mode).
+ *  No value jumps on track change — applies delta against the package's cached state. */
+function ringAdjustActivePropertyValue(ringIndex, delta, stepSize) {
+    ringManager === null || ringManager === void 0 ? void 0 : ringManager.adjustActivePropertyValue(ringIndex, delta, stepSize);
+}
+/** Adjust the last-selected parameter in Ableton by a relative delta. */
+function adjustSelectedParameter(delta, stepSize) {
+    ringManager === null || ringManager === void 0 ? void 0 : ringManager.adjustSelectedParameter(delta, stepSize);
+}
+/** Request a full state dump (ring tracks, selected track, selected parameter). */
+function requestFullState() {
+    return __awaiter(this, void 0, void 0, function* () {
+        yield (ringManager === null || ringManager === void 0 ? void 0 : ringManager.requestFullState());
+    });
 }

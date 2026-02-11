@@ -15,7 +15,8 @@
  *   { evt: "RT_PAN",   i: ringIndex, v: number  }
  *   { evt: "RT_SEND",  i: ringIndex, si: sendIndex, v: number }
  *   { evt: "RT_INFO",  i: ringIndex, name: string, color: [r, g, b] }
- *   { evt: "RT_SELECTED", name, color, ringIndex }  — selected track info
+ *   { evt: "RT_SELECTED", index, ringIndex, name, color: [r, g, b] }  — selected track info
+ *   { evt: "RT_PARAM", name: string, v: number, min: number, max: number }  — selected parameter
  */
 
 import { Ableton } from "ableton-js";
@@ -31,6 +32,7 @@ export interface RingTrackState {
   ringIndex: number;
   name: string;
   color: [number, number, number];
+  isMidi: boolean;
   mute: boolean;
   solo: boolean;
   arm: boolean;
@@ -88,6 +90,24 @@ export class RingManager {
   /** All tracks in the session — cached, refreshed on `tracks` listener. */
   private allTracks: Track[] = [];
 
+  /** Currently active property for `setActivePropertyValue`. */
+  private activeProperty: string = "volume";
+
+  // -- Selected parameter state ------------------------------------------
+
+  /** The DeviceParameter object currently selected in Ableton's UI. */
+  private selectedParam: any = null;
+
+  /** Cached properties of the selected parameter. */
+  private selectedParamName: string = "";
+  private selectedParamValue: number = 0;
+  private selectedParamMin: number = 0;
+  private selectedParamMax: number = 1;
+
+  /** Guard: true while onSelectedParameterChanged is fetching min/max.
+   *  Blocks adjustSelectedParameter to prevent stale-range writes. */
+  private selectedParamSwitching: boolean = false;
+
   constructor(ableton: Ableton, sendMessage: SendMessageFn) {
     this.ableton = ableton;
     this.sendMessage = sendMessage;
@@ -124,6 +144,23 @@ export class RingManager {
       })
     );
 
+    // When the user selects a different parameter in Ableton's UI,
+    // subscribe to its value and push name + value to Grid.
+    await this.globalSubs.add(
+      "song:view:selected_parameter",
+      await this.ableton.song.view.addListener("selected_parameter", async (param) => {
+        await this.onSelectedParameterChanged(param);
+      })
+    );
+
+    // Also fetch the initially selected parameter
+    try {
+      const initialParam = await this.ableton.song.view.get("selected_parameter");
+      if (initialParam) {
+        await this.onSelectedParameterChanged(initialParam);
+      }
+    } catch (_) { /* no parameter selected yet */ }
+
     // When the user selects a different track in Ableton, move the ring
     // to keep it visible (if it's outside the current window).
     await this.globalSubs.add(
@@ -137,13 +174,15 @@ export class RingManager {
           await this.followTrackIndex(trackIndex);
         }
         // Notify Grid of the selected track's info
+        const ringIdx = trackIndex !== -1
+          ? this.ringIndexByTrackId.get(track.raw.id) ?? -1
+          : -1;
         this.sendMessage({
           evt: "RT_SELECTED",
+          index: trackIndex,
+          ringIndex: ringIdx,
           name: track.raw.name,
           color: hexToRgb(track.raw.color),
-          ringIndex: trackIndex !== -1
-            ? this.ringIndexByTrackId.get(track.raw.id) ?? -1
-            : -1,
         });
       })
     );
@@ -201,6 +240,7 @@ export class RingManager {
     this.ringIndexByTrackId.clear();
     this.trackStates.clear();
     this.mixerCache.clear();
+    this.selectedParam = null;
   }
 
   // -----------------------------------------------------------------------
@@ -258,6 +298,8 @@ export class RingManager {
   setVolume(ringIndex: number, value: number): void {
     const track = this.getTrackAtRingIndex(ringIndex);
     if (!track) return;
+    const state = this.trackStates.get(track.raw.id);
+    if (state?.isMidi) return;
     const cached = this.mixerCache.get(track.raw.id);
     if (!cached) return;
     cached.volume.set("value", value);
@@ -270,6 +312,8 @@ export class RingManager {
   setPanning(ringIndex: number, value: number): void {
     const track = this.getTrackAtRingIndex(ringIndex);
     if (!track) return;
+    const state = this.trackStates.get(track.raw.id);
+    if (state?.isMidi) return;
     const cached = this.mixerCache.get(track.raw.id);
     if (!cached) return;
     cached.panning.set("value", value);
@@ -295,6 +339,196 @@ export class RingManager {
     const track = this.getTrackAtRingIndex(ringIndex);
     if (!track) return;
     this.ableton.song.view.set("selected_track", track.raw.id);
+  }
+
+  /**
+   * Set the active property that `setActivePropertyValue` will target.
+   * Supported values: \"volume\", \"panning\", \"send:N\", \"selected_parameter\".
+   */
+  setActiveProperty(property: string): void {
+    this.activeProperty = property;
+  }
+
+  /**
+   * Set the active property's value on the track at a ring index,
+   * mapping from raw 8-bit (0–255) to the parameter's native range.
+   *
+   * Mapping:
+   *   volume             → raw / 255                    (0..1)
+   *   panning            → (raw / 255) * 2 - 1          (-1..1)
+   *   send:N             → raw / 255                    (0..1)
+   *   selected_parameter → raw / 255 * (max - min) + min
+   */
+  setActivePropertyValue(ringIndex: number, rawValue: number): void {
+    // Clamp to 0–255
+    const clamped = Math.max(0, Math.min(255, rawValue));
+    const norm = clamped / 255;
+
+    if (this.activeProperty === "selected_parameter") {
+      if (this.selectedParam && !this.selectedParamSwitching) {
+        const value = this.selectedParamMin + norm * (this.selectedParamMax - this.selectedParamMin);
+        try {
+          this.selectedParam.set("value", value);
+        } catch (err) {
+          console.warn("[RingManager] Failed to set selected parameter value:", err);
+        }
+      }
+    } else if (this.activeProperty === "volume") {
+      this.setVolume(ringIndex, norm);
+    } else if (this.activeProperty === "panning") {
+      this.setPanning(ringIndex, norm * 2 - 1);
+    } else if (this.activeProperty.startsWith("send:")) {
+      const sendIndex = parseInt(this.activeProperty.slice(5), 10);
+      if (!isNaN(sendIndex)) {
+        this.setSend(ringIndex, sendIndex, norm);
+      }
+    }
+  }
+
+  /**
+   * Adjust the active property by a relative delta. This is the primary
+   * method for continuous controls (encoders in relative mode) — it reads
+   * the current cached value from trackStates, applies the delta, clamps,
+   * and writes the result to Ableton.
+   *
+   * Because the package already tracks every track's values via listeners,
+   * there is NO value jump when navigating to a different track — the delta
+   * is always applied against the correct cached value.
+   *
+   * @param ringIndex  - The ring-relative track index
+   * @param delta      - Signed integer from the encoder (+1, -1, +N, -N)
+   * @param stepSize   - How much each delta unit moves the parameter.
+   *                     Defaults to 1/127 (~0.8% of full range).
+   *                     Smaller = finer control, larger = faster sweeps.
+   */
+  adjustActivePropertyValue(ringIndex: number, delta: number, stepSize: number = 1 / 127): void {
+    if (this.activeProperty === "selected_parameter") {
+      // Route to the selected parameter — no ring track needed
+      this.adjustSelectedParameter(delta, stepSize);
+      return;
+    }
+
+    const track = this.getTrackAtRingIndex(ringIndex);
+    if (!track) return;
+
+    const state = this.trackStates.get(track.raw.id);
+    if (!state) return;
+
+    if (this.activeProperty === "volume") {
+      // Volume range: 0..1
+      const newVal = Math.max(0, Math.min(1, state.volume + delta * stepSize));
+      this.setVolume(ringIndex, newVal);
+    } else if (this.activeProperty === "panning") {
+      // Panning range: -1..1 — step covers a range of 2
+      const newVal = Math.max(-1, Math.min(1, state.panning + delta * stepSize * 2));
+      this.setPanning(ringIndex, newVal);
+    } else if (this.activeProperty.startsWith("send:")) {
+      const sendIndex = parseInt(this.activeProperty.slice(5), 10);
+      if (!isNaN(sendIndex) && sendIndex < state.sends.length) {
+        // Send range: 0..1
+        const newVal = Math.max(0, Math.min(1, state.sends[sendIndex] + delta * stepSize));
+        this.setSend(ringIndex, sendIndex, newVal);
+      }
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // Selected parameter (last-clicked parameter in Ableton's UI)
+  // -----------------------------------------------------------------------
+
+  /**
+   * Called when the selected parameter changes in Ableton.
+   * Tears down the old value listener, caches min/max/name, subscribes
+   * to the new parameter's value, and pushes an RT_PARAM event to Grid.
+   */
+  private async onSelectedParameterChanged(param: any): Promise<void> {
+    // Block encoder adjustments while we're switching
+    this.selectedParamSwitching = true;
+
+    // Remove old value listener
+    await this.globalSubs.removeByPrefix("selected_param:value");
+
+    if (!param) {
+      this.selectedParam = null;
+      this.selectedParamName = "";
+      this.selectedParamValue = 0;
+      this.selectedParamMin = 0;
+      this.selectedParamMax = 1;
+      this.selectedParamSwitching = false;
+      this.sendMessage({ evt: "RT_PARAM", name: "", v: 0, nv: 0, min: 0, max: 1 });
+      return;
+    }
+
+    try {
+      // Fetch name, value, min, max in parallel
+      const [name, value, min, max] = await Promise.all([
+        param.get("name"),
+        param.get("value"),
+        param.get("min"),
+        param.get("max"),
+      ]);
+
+      // Update all cached state atomically before unblocking
+      this.selectedParam = param;
+      this.selectedParamName = name;
+      this.selectedParamValue = value;
+      this.selectedParamMin = min;
+      this.selectedParamMax = max;
+
+      // Listen to value changes (e.g. automation, other controllers)
+      await this.globalSubs.add(
+        "selected_param:value",
+        await param.addListener("value", (v: number) => {
+          this.selectedParamValue = v;
+          const range = this.selectedParamMax - this.selectedParamMin;
+          this.sendMessage({
+            evt: "RT_PARAM",
+            name: this.selectedParamName,
+            v,
+            nv: range !== 0 ? (v - this.selectedParamMin) / range : 0,
+            min: this.selectedParamMin,
+            max: this.selectedParamMax,
+          });
+        })
+      );
+
+      // Push the initial state
+      const range = max - min;
+      this.sendMessage({ evt: "RT_PARAM", name, v: value, nv: range !== 0 ? (value - min) / range : 0, min, max });
+    } catch (err) {
+      console.warn("[RingManager] Failed to set up selected parameter:", err);
+      this.selectedParam = null;
+    } finally {
+      this.selectedParamSwitching = false;
+    }
+  }
+
+  /**
+   * Adjust the selected parameter by a relative delta.
+   * The delta is scaled to the parameter's native [min, max] range.
+   *
+   * @param delta    - Signed integer from the encoder (+1, -1, +N, -N)
+   * @param stepSize - Fraction of full range per delta unit.
+   *                   Defaults to 1/127 (~0.8% of full range).
+   */
+  adjustSelectedParameter(delta: number, stepSize: number = 1 / 127): void {
+    if (!this.selectedParam || this.selectedParamSwitching) return;
+
+    const range = this.selectedParamMax - this.selectedParamMin;
+    if (range === 0) return;
+
+    const step = delta * stepSize * range;
+    const newVal = Math.max(
+      this.selectedParamMin,
+      Math.min(this.selectedParamMax, this.selectedParamValue + step)
+    );
+
+    try {
+      this.selectedParam.set("value", newVal);
+    } catch (err) {
+      console.warn("[RingManager] Failed to set selected parameter value:", err);
+    }
+    // The value listener will update selectedParamValue and push RT_PARAM
   }
 
   // -----------------------------------------------------------------------
@@ -365,12 +599,19 @@ export class RingManager {
     // Helper: resolve current ring index at callback time
     const idx = () => this.ringIndexByTrackId.get(id);
 
-    // Initialize state
+    // Detect MIDI tracks — they lack meaningful volume/pan controls
+    const hasMidiInput = await track.get("has_midi_input");
+    const hasAudioInput = await track.get("has_audio_input");
+    const trackIsMidi = !!hasMidiInput && !hasAudioInput;
+
+    // Initialize state — fetch ALL values fresh from Ableton, never use
+    // stale track.raw snapshots for mutable properties.
     const state: RingTrackState = {
       id,
       ringIndex: idx() ?? 0,
       name: track.raw.name,
       color: hexToRgb(track.raw.color),
+      isMidi: trackIsMidi,
       mute: false,
       solo: false,
       arm: false,
@@ -380,9 +621,37 @@ export class RingManager {
       sends: [],
     };
 
-    // Mute
+    // Name listener
+    await this.ringSubs.add(
+      `track:${id}:name`,
+      await track.addListener("name", (value) => {
+        const s = this.trackStates.get(id);
+        if (s) s.name = value;
+        const i = idx();
+        if (i !== undefined) {
+          this.sendMessage({ evt: "RT_INFO", i, name: value, color: s?.color ?? [0, 0, 0], isMidi: s?.isMidi ?? false });
+        }
+      })
+    );
+
+    // Color listener (value is a Color object — convert to [r, g, b])
+    await this.ringSubs.add(
+      `track:${id}:color`,
+      await track.addListener("color", (value: any) => {
+        const rawHex = typeof value === "number" ? value : (value?.numberRepresentation ?? value?.toJSON?.() ?? 0);
+        const rgb: [number, number, number] = hexToRgb(rawHex);
+        const s = this.trackStates.get(id);
+        if (s) s.color = rgb;
+        const i = idx();
+        if (i !== undefined) {
+          this.sendMessage({ evt: "RT_INFO", i, name: s?.name ?? "", color: rgb, isMidi: s?.isMidi ?? false });
+        }
+      })
+    );
+
+    // Mute — fetch current value, not stale track.raw.mute
     if (!isMaster) {
-      state.mute = track.raw.mute;
+      state.mute = await track.get("mute");
       await this.ringSubs.add(
         `track:${id}:mute`,
         await track.addListener("mute", (value) => {
@@ -396,9 +665,10 @@ export class RingManager {
       );
     }
 
-    // Solo
+    // Solo — fetch current value, not stale track.raw.solo
     if (!isMaster) {
-      state.solo = track.raw.solo;
+      const soloVal = await track.get("solo");
+      state.solo = !!soloVal;
       await this.ringSubs.add(
         `track:${id}:solo`,
         await track.addListener("solo", (value) => {
@@ -433,35 +703,39 @@ export class RingManager {
     // Mixer device params
     const mixer = await track.get("mixer_device");
 
-    // Volume
-    const volumeParam = await mixer.get("volume");
-    state.volume = volumeParam.raw.value;
-    await this.ringSubs.add(
-      `track:${id}:volume`,
-      await volumeParam.addListener("value", (value) => {
-        const s = this.trackStates.get(id);
-        if (s) s.volume = value;
-        const i = idx();
-        if (i !== undefined) {
-          this.sendMessage({ evt: "RT_VOL", i, v: value });
-        }
-      })
-    );
+    // Volume & Panning — skip for MIDI tracks (no meaningful mixer controls)
+    let volumeParam: any = null;
+    let panningParam: any = null;
 
-    // Panning
-    const panningParam = await mixer.get("panning");
-    state.panning = panningParam.raw.value;
-    await this.ringSubs.add(
-      `track:${id}:panning`,
-      await panningParam.addListener("value", (value) => {
-        const s = this.trackStates.get(id);
-        if (s) s.panning = value;
-        const i = idx();
-        if (i !== undefined) {
-          this.sendMessage({ evt: "RT_PAN", i, v: value });
-        }
-      })
-    );
+    if (!trackIsMidi) {
+      volumeParam = await mixer.get("volume");
+      state.volume = volumeParam.raw.value;
+      await this.ringSubs.add(
+        `track:${id}:volume`,
+        await volumeParam.addListener("value", (value) => {
+          const s = this.trackStates.get(id);
+          if (s) s.volume = value;
+          const i = idx();
+          if (i !== undefined) {
+            this.sendMessage({ evt: "RT_VOL", i, v: value, nv: value });
+          }
+        })
+      );
+
+      panningParam = await mixer.get("panning");
+      state.panning = panningParam.raw.value;
+      await this.ringSubs.add(
+        `track:${id}:panning`,
+        await panningParam.addListener("value", (value) => {
+          const s = this.trackStates.get(id);
+          if (s) s.panning = value;
+          const i = idx();
+          if (i !== undefined) {
+            this.sendMessage({ evt: "RT_PAN", i, v: value, nv: (value + 1) / 2 });
+          }
+        })
+      );
+    }
 
     // Sends (array — one DeviceParameter per return track)
     let sendParams: any[] = [];
@@ -477,7 +751,7 @@ export class RingManager {
             if (s) s.sends[si] = value;
             const i = idx();
             if (i !== undefined) {
-              this.sendMessage({ evt: "RT_SEND", i, si, v: value });
+              this.sendMessage({ evt: "RT_SEND", i, si, v: value, nv: value });
             }
           })
         );
@@ -533,7 +807,7 @@ export class RingManager {
             if (s) s.sends[si] = value;
             const i = idx();
             if (i !== undefined) {
-              this.sendMessage({ evt: "RT_SEND", i, si, v: value });
+              this.sendMessage({ evt: "RT_SEND", i, si, v: value, nv: value });
             }
           })
         );
@@ -564,12 +838,14 @@ export class RingManager {
       this.sendMessage({ evt: "RT_MUTE", i, v: state.mute });
       this.sendMessage({ evt: "RT_SOLO", i, v: state.solo });
       this.sendMessage({ evt: "RT_ARM", i, v: state.arm });
-      this.sendMessage({ evt: "RT_VOL", i, v: state.volume });
-      this.sendMessage({ evt: "RT_PAN", i, v: state.panning });
-      this.sendMessage({ evt: "RT_INFO", i, name: state.name, color: state.color });
+      if (!state.isMidi) {
+        this.sendMessage({ evt: "RT_VOL", i, v: state.volume, nv: state.volume });
+        this.sendMessage({ evt: "RT_PAN", i, v: state.panning, nv: (state.panning + 1) / 2 });
+      }
+      this.sendMessage({ evt: "RT_INFO", i, name: state.name, color: state.color, isMidi: state.isMidi });
 
       for (let si = 0; si < state.sends.length; si++) {
-        this.sendMessage({ evt: "RT_SEND", i, si, v: state.sends[si] });
+        this.sendMessage({ evt: "RT_SEND", i, si, v: state.sends[si], nv: state.sends[si] });
       }
     }
   }
@@ -616,15 +892,64 @@ export class RingManager {
       subCount: this.ringSubs.size,
     };
   }
+
+  /**
+   * Request a full state dump — pushes all ring track data, the currently
+   * selected track, and the currently selected parameter to Grid.
+   * Call this from Grid on module init / reconnect.
+   */
+  async requestFullState(): Promise<void> {
+    // 1. Push all ring track states
+    this.sendFullSync();
+
+    // 2. Push currently selected track info
+    try {
+      const selectedTrack = await this.ableton.song.view.get("selected_track");
+      if (selectedTrack) {
+        const trackIndex = this.allTracks.findIndex(
+          (t) => t.raw.id === selectedTrack.raw.id
+        );
+        const ringIdx = trackIndex !== -1
+          ? this.ringIndexByTrackId.get(selectedTrack.raw.id) ?? -1
+          : -1;
+        this.sendMessage({
+          evt: "RT_SELECTED",
+          index: trackIndex,
+          ringIndex: ringIdx,
+          name: selectedTrack.raw.name,
+          color: hexToRgb(selectedTrack.raw.color),
+        });
+      }
+    } catch (err) {
+      console.warn("[RingManager] Failed to fetch selected track on state request:", err);
+    }
+
+    // 3. Push currently selected parameter info
+    if (this.selectedParam) {
+      const range = this.selectedParamMax - this.selectedParamMin;
+      this.sendMessage({
+        evt: "RT_PARAM",
+        name: this.selectedParamName,
+        v: this.selectedParamValue,
+        nv: range !== 0 ? (this.selectedParamValue - this.selectedParamMin) / range : 0,
+        min: this.selectedParamMin,
+        max: this.selectedParamMax,
+      });
+    } else {
+      this.sendMessage({ evt: "RT_PARAM", name: "", v: 0, nv: 0, min: 0, max: 1 });
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
-// Helper
+// Helpers
 // ---------------------------------------------------------------------------
 
+/** Convert a raw hex color integer (0xRRGGBB) to an [r, g, b] tuple. */
 function hexToRgb(hex: number): [number, number, number] {
-  const r = (hex >> 16) & 255;
-  const g = (hex >> 8) & 255;
-  const b = hex & 255;
-  return [r, g, b];
+  return [
+    (hex >> 16) & 0xff,
+    (hex >> 8) & 0xff,
+    hex & 0xff,
+  ];
 }

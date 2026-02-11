@@ -145,3 +145,29 @@ export function ringSetSend(
 export function ringSelectTrack(ringIndex: number) {
   ringManager?.selectTrackInRing(ringIndex);
 }
+
+/** Set the active property mode ("volume", "panning", "send:N"). */
+export function ringSetActiveProperty(property: string) {
+  ringManager?.setActiveProperty(property);
+}
+
+/** Set the active property's value from a raw 8-bit Grid value (0–255). */
+export function ringSetActivePropertyValue(ringIndex: number, rawValue: number) {
+  ringManager?.setActivePropertyValue(ringIndex, rawValue);
+}
+
+/** Adjust the active property by a relative delta (for encoders in relative mode).
+ *  No value jumps on track change — applies delta against the package's cached state. */
+export function ringAdjustActivePropertyValue(ringIndex: number, delta: number, stepSize?: number) {
+  ringManager?.adjustActivePropertyValue(ringIndex, delta, stepSize);
+}
+
+/** Adjust the last-selected parameter in Ableton by a relative delta. */
+export function adjustSelectedParameter(delta: number, stepSize?: number) {
+  ringManager?.adjustSelectedParameter(delta, stepSize);
+}
+
+/** Request a full state dump (ring tracks, selected track, selected parameter). */
+export async function requestFullState() {
+  await ringManager?.requestFullState();
+}

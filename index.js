@@ -165,6 +165,11 @@ const commandMap = {
   ring_set_panning: (args) => ableton.ringSetPanning(args[1], args[2]),
   ring_set_send: (args) => ableton.ringSetSend(args[1], args[2], args[3]),
   ring_select_track: (args) => ableton.ringSelectTrack(args[1]),
+  ring_set_active_property: (args) => ableton.ringSetActiveProperty(args[1]),
+  ring_set_active_property_value: (args) => ableton.ringSetActivePropertyValue(args[1], args[2]),
+  ring_adjust_active_property_value: (args) => ableton.ringAdjustActivePropertyValue(args[1], args[2], args[3]),
+  adjust_selected_parameter: (args) => ableton.adjustSelectedParameter(args[1], args[2]),
+  request_full_state: (args) => ableton.requestFullState(),
 };
 
 exports.sendMessage = function (args) {
