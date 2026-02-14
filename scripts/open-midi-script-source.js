@@ -13,7 +13,7 @@ function getMidiScriptSource() {
   // First try from node_modules
   const nodeModulesPath = path.join(
     __dirname,
-    "../node_modules/ableton-js/midi-script"
+    "../node_modules/ableton-js/midi-script",
   );
 
   if (fs.existsSync(nodeModulesPath)) {

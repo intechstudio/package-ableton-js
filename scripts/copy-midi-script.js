@@ -14,14 +14,14 @@ function getRemoteScriptsDir() {
     // macOS
     return path.join(
       process.env.HOME,
-      "Music/Ableton/User Library/Remote Scripts"
+      "Music/Ableton/User Library/Remote Scripts",
     );
   } else if (platform === "win32") {
     // Windows
     const userProfile = process.env.USERPROFILE;
     return path.join(
       userProfile,
-      "Documents/Ableton/User Library/Remote Scripts"
+      "Documents/Ableton/User Library/Remote Scripts",
     );
   } else {
     throw new Error(`Unsupported platform: ${platform}`);
@@ -35,7 +35,7 @@ function getMidiScriptSource() {
   // First try from node_modules
   const nodeModulesPath = path.join(
     __dirname,
-    "../node_modules/ableton-js/midi-script"
+    "../node_modules/ableton-js/midi-script",
   );
 
   if (fs.existsSync(nodeModulesPath)) {

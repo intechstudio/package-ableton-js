@@ -4,7 +4,7 @@ import { RingManager } from "./ring-manager";
 const ableton = new Ableton({ logger: console });
 
 let sendMessageToModule: (
-  args: any[] | { [key: string]: any }
+  args: any[] | { [key: string]: any },
 ) => void = () => {};
 
 let ringManager: RingManager | undefined = undefined;
@@ -58,13 +58,13 @@ export async function navigate(direction: string) {
   const allTracks = await ableton.song.get("tracks");
 
   const currentIndex = allTracks.findIndex(
-    (track) => track.raw.id === currentTrack.raw.id
+    (track) => track.raw.id === currentTrack.raw.id,
   );
 
   const dir = direction === "right" ? 1 : -1;
   const nextIndex = Math.max(
     0,
-    Math.min(currentIndex + dir, allTracks.length - 1)
+    Math.min(currentIndex + dir, allTracks.length - 1),
   );
 
   try {
@@ -83,7 +83,7 @@ export async function ringSetup(
   numTracks: number,
   numScenes: number,
   trackOffset = 0,
-  sceneOffset = 0
+  sceneOffset = 0,
 ) {
   if (ringManager) {
     await ringManager.setupRing(numTracks, numScenes, trackOffset, sceneOffset);
@@ -91,10 +91,7 @@ export async function ringSetup(
 }
 
 /** Move the ring offset to an absolute position. */
-export async function ringSetOffset(
-  trackOffset: number,
-  sceneOffset: number
-) {
+export async function ringSetOffset(trackOffset: number, sceneOffset: number) {
   if (ringManager) {
     await ringManager.setOffset(trackOffset, sceneOffset);
   }
@@ -136,7 +133,7 @@ export function ringSetPanning(ringIndex: number, value: number) {
 export function ringSetSend(
   ringIndex: number,
   sendIndex: number,
-  value: number
+  value: number,
 ) {
   ringManager?.setSend(ringIndex, sendIndex, value);
 }
@@ -152,13 +149,20 @@ export function ringSetActiveProperty(property: string) {
 }
 
 /** Set the active property's value from a raw 8-bit Grid value (0–255). */
-export function ringSetActivePropertyValue(ringIndex: number, rawValue: number) {
+export function ringSetActivePropertyValue(
+  ringIndex: number,
+  rawValue: number,
+) {
   ringManager?.setActivePropertyValue(ringIndex, rawValue);
 }
 
 /** Adjust the active property by a relative delta (for encoders in relative mode).
  *  No value jumps on track change — applies delta against the package's cached state. */
-export function ringAdjustActivePropertyValue(ringIndex: number, delta: number, stepSize?: number) {
+export function ringAdjustActivePropertyValue(
+  ringIndex: number,
+  delta: number,
+  stepSize?: number,
+) {
   ringManager?.adjustActivePropertyValue(ringIndex, delta, stepSize);
 }
 

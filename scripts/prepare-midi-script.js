@@ -10,7 +10,7 @@ const path = require("path");
 function prepareMidiScript() {
   const sourcePath = path.join(
     __dirname,
-    "../node_modules/ableton-js/midi-script"
+    "../node_modules/ableton-js/midi-script",
   );
   const targetPath = path.join(__dirname, "../midi-script");
 

@@ -74,7 +74,7 @@ exports.addMessagePort = async function (port, senderId) {
         try {
           const scriptPath = path.join(
             __dirname,
-            "scripts/copy-midi-script.js"
+            "scripts/copy-midi-script.js",
           );
           execSync(`node "${scriptPath}"`, { stdio: "inherit" });
           port.postMessage({
@@ -97,7 +97,7 @@ exports.addMessagePort = async function (port, senderId) {
         try {
           const scriptPath = path.join(
             __dirname,
-            "scripts/open-remote-scripts.js"
+            "scripts/open-remote-scripts.js",
           );
           execSync(`node "${scriptPath}"`, { stdio: "inherit" });
         } catch (error) {
@@ -109,7 +109,7 @@ exports.addMessagePort = async function (port, senderId) {
         try {
           const scriptPath = path.join(
             __dirname,
-            "scripts/open-midi-script-source.js"
+            "scripts/open-midi-script-source.js",
           );
           execSync(`node "${scriptPath}"`, { stdio: "inherit" });
         } catch (error) {
@@ -166,11 +166,15 @@ const commandMap = {
   ring_set_send: (args) => ableton.ringSetSend(args[1], args[2], args[3]),
   ring_select_track: (args) => ableton.ringSelectTrack(args[1]),
   ring_set_active_property: (args) => ableton.ringSetActiveProperty(args[1]),
-  ring_set_active_property_value: (args) => ableton.ringSetActivePropertyValue(args[1], args[2]),
-  ring_adjust_active_property_value: (args) => ableton.ringAdjustActivePropertyValue(args[1], args[2], args[3]),
-  adjust_selected_parameter: (args) => ableton.adjustSelectedParameter(args[1], args[2]),
+  ring_set_active_property_value: (args) =>
+    ableton.ringSetActivePropertyValue(args[1], args[2]),
+  ring_adjust_active_property_value: (args) =>
+    ableton.ringAdjustActivePropertyValue(args[1], args[2], args[3]),
+  adjust_selected_parameter: (args) =>
+    ableton.adjustSelectedParameter(args[1], args[2]),
   reset_selected_parameter: (args) => ableton.resetSelectedParameter(),
-  ring_reset_active_property: (args) => ableton.ringResetActiveProperty(args[1]),
+  ring_reset_active_property: (args) =>
+    ableton.ringResetActiveProperty(args[1]),
   request_full_state: (args) => ableton.requestFullState(),
 };
 

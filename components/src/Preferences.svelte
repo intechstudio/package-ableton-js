@@ -16,7 +16,7 @@
   // @ts-ignore
   const messagePort = createPackageMessagePort(
     "package-ableton-js",
-    "preferences"
+    "preferences",
   );
 
   let myFirstVariable = false;
@@ -148,10 +148,19 @@
       <BlockBody>
         <ul>
           <li>Set event tracking in Grid Editor to OFF</li>
-          <li>Search the profile "AbletonJS Selected Track Control" under workflows</li>
+          <li>
+            Search the profile "AbletonJS Selected Track Control" under
+            workflows
+          </li>
           <li>Upload the profile to a VSN1 module</li>
-          <li>Open up Ableton, in MIDI preferences make sure control script "AbletonJS" is present and selected</li>
-          <li>Review the profile's description for info about the available controls</li>
+          <li>
+            Open up Ableton, in MIDI preferences make sure control script
+            "AbletonJS" is present and selected
+          </li>
+          <li>
+            Review the profile's description for info about the available
+            controls
+          </li>
         </ul>
       </BlockBody>
     </Block>

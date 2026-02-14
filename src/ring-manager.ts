@@ -45,9 +45,9 @@ export interface RingTrackState {
 
 /** Cached DeviceParameter references — avoids re-fetching mixer_device on every set call. */
 interface MixerDeviceCache {
-  volume: any;   // DeviceParameter
-  panning: any;  // DeviceParameter
-  sends: any[];  // DeviceParameter[]
+  volume: any; // DeviceParameter
+  panning: any; // DeviceParameter
+  sends: any[]; // DeviceParameter[]
 }
 
 export type SendMessageFn = (msg: { [key: string]: any }) => void;
@@ -138,7 +138,7 @@ export class RingManager {
       await this.ableton.song.addListener("tracks", async (tracks) => {
         this.allTracks = tracks;
         await this.syncRingListeners();
-      })
+      }),
     );
 
     // When return tracks change, send counts may change — re-subscribe sends
@@ -147,25 +147,31 @@ export class RingManager {
       "song:return_tracks",
       await this.ableton.song.addListener("return_tracks", async () => {
         await this.resubscribeSendsForAllRingTracks();
-      })
+      }),
     );
 
     // When the user selects a different parameter in Ableton's UI,
     // subscribe to its value and push name + value to Grid.
     await this.globalSubs.add(
       "song:view:selected_parameter",
-      await this.ableton.song.view.addListener("selected_parameter", async (param) => {
-        await this.onSelectedParameterChanged(param);
-      })
+      await this.ableton.song.view.addListener(
+        "selected_parameter",
+        async (param) => {
+          await this.onSelectedParameterChanged(param);
+        },
+      ),
     );
 
     // Also fetch the initially selected parameter
     try {
-      const initialParam = await this.ableton.song.view.get("selected_parameter");
+      const initialParam =
+        await this.ableton.song.view.get("selected_parameter");
       if (initialParam) {
         await this.onSelectedParameterChanged(initialParam);
       }
-    } catch (_) { /* no parameter selected yet */ }
+    } catch (_) {
+      /* no parameter selected yet */
+    }
 
     // Transport: is_playing
     this.isPlaying = await this.ableton.song.get("is_playing");
@@ -173,8 +179,12 @@ export class RingManager {
       "song:is_playing",
       await this.ableton.song.addListener("is_playing", (value) => {
         this.isPlaying = !!value;
-        this.sendMessage({ evt: "RT_TRANSPORT", playing: this.isPlaying, recording: this.isRecording });
-      })
+        this.sendMessage({
+          evt: "RT_TRANSPORT",
+          playing: this.isPlaying,
+          recording: this.isRecording,
+        });
+      }),
     );
 
     // Transport: record_mode
@@ -183,37 +193,49 @@ export class RingManager {
       "song:record_mode",
       await this.ableton.song.addListener("record_mode", (value) => {
         this.isRecording = !!value;
-        this.sendMessage({ evt: "RT_TRANSPORT", playing: this.isPlaying, recording: this.isRecording });
-      })
+        this.sendMessage({
+          evt: "RT_TRANSPORT",
+          playing: this.isPlaying,
+          recording: this.isRecording,
+        });
+      }),
     );
 
     // Send initial transport state
-    this.sendMessage({ evt: "RT_TRANSPORT", playing: this.isPlaying, recording: this.isRecording });
+    this.sendMessage({
+      evt: "RT_TRANSPORT",
+      playing: this.isPlaying,
+      recording: this.isRecording,
+    });
 
     // When the user selects a different track in Ableton, move the ring
     // to keep it visible (if it's outside the current window).
     await this.globalSubs.add(
       "song:view:selected_track",
-      await this.ableton.song.view.addListener("selected_track", async (track) => {
-        if (!track) return;
-        const trackIndex = this.allTracks.findIndex(
-          (t) => t.raw.id === track.raw.id
-        );
-        if (trackIndex !== -1) {
-          await this.followTrackIndex(trackIndex);
-        }
-        // Notify Grid of the selected track's info
-        const ringIdx = trackIndex !== -1
-          ? this.ringIndexByTrackId.get(track.raw.id) ?? -1
-          : -1;
-        this.sendMessage({
-          evt: "RT_SELECTED",
-          index: trackIndex,
-          ringIndex: ringIdx,
-          name: track.raw.name,
-          color: hexToRgb(track.raw.color),
-        });
-      })
+      await this.ableton.song.view.addListener(
+        "selected_track",
+        async (track) => {
+          if (!track) return;
+          const trackIndex = this.allTracks.findIndex(
+            (t) => t.raw.id === track.raw.id,
+          );
+          if (trackIndex !== -1) {
+            await this.followTrackIndex(trackIndex);
+          }
+          // Notify Grid of the selected track's info
+          const ringIdx =
+            trackIndex !== -1
+              ? (this.ringIndexByTrackId.get(track.raw.id) ?? -1)
+              : -1;
+          this.sendMessage({
+            evt: "RT_SELECTED",
+            index: trackIndex,
+            ringIndex: ringIdx,
+            name: track.raw.name,
+            color: hexToRgb(track.raw.color),
+          });
+        },
+      ),
     );
   }
 
@@ -225,7 +247,7 @@ export class RingManager {
     numTracks: number,
     numScenes: number,
     trackOffset = 0,
-    sceneOffset = 0
+    sceneOffset = 0,
   ): Promise<void> {
     this.ringWidth = numTracks;
     this.ringScenes = numScenes;
@@ -253,7 +275,10 @@ export class RingManager {
   async navigateRing(direction: "left" | "right"): Promise<void> {
     const delta = direction === "right" ? 1 : -1;
     const maxOffset = Math.max(0, this.allTracks.length - this.ringWidth);
-    const newOffset = Math.max(0, Math.min(this.trackOffset + delta, maxOffset));
+    const newOffset = Math.max(
+      0,
+      Math.min(this.trackOffset + delta, maxOffset),
+    );
     if (newOffset !== this.trackOffset) {
       await this.setOffset(newOffset, this.sceneOffset);
     }
@@ -393,12 +418,22 @@ export class RingManager {
           evt: "RT_PARAM",
           name: this.selectedParamName,
           v: this.selectedParamValue,
-          nv: range !== 0 ? (this.selectedParamValue - this.selectedParamMin) / range : 0,
+          nv:
+            range !== 0
+              ? (this.selectedParamValue - this.selectedParamMin) / range
+              : 0,
           min: this.selectedParamMin,
           max: this.selectedParamMax,
         });
       } else {
-        this.sendMessage({ evt: "RT_PARAM", name: "", v: 0, nv: 0, min: 0, max: 1 });
+        this.sendMessage({
+          evt: "RT_PARAM",
+          name: "",
+          v: 0,
+          nv: 0,
+          min: 0,
+          max: 1,
+        });
       }
     } else {
       // Push the active property for all ring tracks
@@ -408,13 +443,29 @@ export class RingManager {
         const i = this.ringIndexByTrackId.get(trackId) ?? 0;
 
         if (this.activeProperty === "volume" && !state.isMidi) {
-          this.sendMessage({ evt: "RT_VOL", i, v: state.volume, nv: state.volume });
+          this.sendMessage({
+            evt: "RT_VOL",
+            i,
+            v: state.volume,
+            nv: state.volume,
+          });
         } else if (this.activeProperty === "panning" && !state.isMidi) {
-          this.sendMessage({ evt: "RT_PAN", i, v: state.panning, nv: (state.panning + 1) / 2 });
+          this.sendMessage({
+            evt: "RT_PAN",
+            i,
+            v: state.panning,
+            nv: (state.panning + 1) / 2,
+          });
         } else if (this.activeProperty.startsWith("send:")) {
           const si = parseInt(this.activeProperty.slice(5), 10);
           if (!isNaN(si) && si < state.sends.length) {
-            this.sendMessage({ evt: "RT_SEND", i, si, v: state.sends[si], nv: state.sends[si] });
+            this.sendMessage({
+              evt: "RT_SEND",
+              i,
+              si,
+              v: state.sends[si],
+              nv: state.sends[si],
+            });
           }
         }
       }
@@ -438,11 +489,16 @@ export class RingManager {
 
     if (this.activeProperty === "selected_parameter") {
       if (this.selectedParam && !this.selectedParamSwitching) {
-        const value = this.selectedParamMin + norm * (this.selectedParamMax - this.selectedParamMin);
+        const value =
+          this.selectedParamMin +
+          norm * (this.selectedParamMax - this.selectedParamMin);
         try {
           this.selectedParam.set("value", value);
         } catch (err) {
-          console.warn("[RingManager] Failed to set selected parameter value:", err);
+          console.warn(
+            "[RingManager] Failed to set selected parameter value:",
+            err,
+          );
         }
       }
     } else if (this.activeProperty === "volume") {
@@ -473,7 +529,11 @@ export class RingManager {
    *                     Defaults to 1/127 (~0.8% of full range).
    *                     Smaller = finer control, larger = faster sweeps.
    */
-  adjustActivePropertyValue(ringIndex: number, delta: number, stepSize: number = 1 / 127): void {
+  adjustActivePropertyValue(
+    ringIndex: number,
+    delta: number,
+    stepSize: number = 1 / 127,
+  ): void {
     if (this.activeProperty === "selected_parameter") {
       // Route to the selected parameter — no ring track needed
       this.adjustSelectedParameter(delta, stepSize);
@@ -492,13 +552,19 @@ export class RingManager {
       this.setVolume(ringIndex, newVal);
     } else if (this.activeProperty === "panning") {
       // Panning range: -1..1 — step covers a range of 2
-      const newVal = Math.max(-1, Math.min(1, state.panning + delta * stepSize * 2));
+      const newVal = Math.max(
+        -1,
+        Math.min(1, state.panning + delta * stepSize * 2),
+      );
       this.setPanning(ringIndex, newVal);
     } else if (this.activeProperty.startsWith("send:")) {
       const sendIndex = parseInt(this.activeProperty.slice(5), 10);
       if (!isNaN(sendIndex) && sendIndex < state.sends.length) {
         // Send range: 0..1
-        const newVal = Math.max(0, Math.min(1, state.sends[sendIndex] + delta * stepSize));
+        const newVal = Math.max(
+          0,
+          Math.min(1, state.sends[sendIndex] + delta * stepSize),
+        );
         this.setSend(ringIndex, sendIndex, newVal);
       }
     }
@@ -528,7 +594,14 @@ export class RingManager {
       this.selectedParamMax = 1;
       this.selectedParamDefault = 0;
       this.selectedParamSwitching = false;
-      this.sendMessage({ evt: "RT_PARAM", name: "", v: 0, nv: 0, min: 0, max: 1 });
+      this.sendMessage({
+        evt: "RT_PARAM",
+        name: "",
+        v: 0,
+        nv: 0,
+        min: 0,
+        max: 1,
+      });
       return;
     }
 
@@ -548,7 +621,10 @@ export class RingManager {
       this.selectedParamValue = value;
       this.selectedParamMin = min;
       this.selectedParamMax = max;
-      this.selectedParamDefault = typeof defaultVal === "number" ? defaultVal : parseFloat(defaultVal) || 0;
+      this.selectedParamDefault =
+        typeof defaultVal === "number"
+          ? defaultVal
+          : parseFloat(defaultVal) || 0;
 
       // Listen to value changes (e.g. automation, other controllers)
       await this.globalSubs.add(
@@ -564,12 +640,19 @@ export class RingManager {
             min: this.selectedParamMin,
             max: this.selectedParamMax,
           });
-        })
+        }),
       );
 
       // Push the initial state
       const range = max - min;
-      this.sendMessage({ evt: "RT_PARAM", name, v: value, nv: range !== 0 ? (value - min) / range : 0, min, max });
+      this.sendMessage({
+        evt: "RT_PARAM",
+        name,
+        v: value,
+        nv: range !== 0 ? (value - min) / range : 0,
+        min,
+        max,
+      });
     } catch (err) {
       console.warn("[RingManager] Failed to set up selected parameter:", err);
       this.selectedParam = null;
@@ -595,13 +678,16 @@ export class RingManager {
     const step = delta * stepSize * range;
     const newVal = Math.max(
       this.selectedParamMin,
-      Math.min(this.selectedParamMax, this.selectedParamValue + step)
+      Math.min(this.selectedParamMax, this.selectedParamValue + step),
     );
 
     try {
       this.selectedParam.set("value", newVal);
     } catch (err) {
-      console.warn("[RingManager] Failed to set selected parameter value:", err);
+      console.warn(
+        "[RingManager] Failed to set selected parameter value:",
+        err,
+      );
     }
     // The value listener will update selectedParamValue and push RT_PARAM
   }
@@ -614,7 +700,7 @@ export class RingManager {
 
     const value = Math.max(
       this.selectedParamMin,
-      Math.min(this.selectedParamMax, this.selectedParamDefault)
+      Math.min(this.selectedParamMax, this.selectedParamDefault),
     );
 
     try {
@@ -663,7 +749,7 @@ export class RingManager {
     // Compute new window
     const windowTracks = this.allTracks.slice(
       this.trackOffset,
-      this.trackOffset + this.ringWidth
+      this.trackOffset + this.ringWidth,
     );
     const newIds = windowTracks.map((t) => t.raw.id);
     const oldIds = new Set(this.currentRingTrackIds);
@@ -697,7 +783,7 @@ export class RingManager {
 
     console.log(
       `[RingManager] synced ring: offset=${this.trackOffset}, width=${this.ringWidth}, ` +
-        `added=${added.length}, removed=${removed.length}, total subs=${this.ringSubs.size}`
+        `added=${added.length}, removed=${removed.length}, total subs=${this.ringSubs.size}`,
     );
   }
 
@@ -748,24 +834,39 @@ export class RingManager {
         if (s) s.name = value;
         const i = idx();
         if (i !== undefined) {
-          this.sendMessage({ evt: "RT_INFO", i, name: value, color: s?.color ?? [0, 0, 0], isMidi: s?.isMidi ?? false });
+          this.sendMessage({
+            evt: "RT_INFO",
+            i,
+            name: value,
+            color: s?.color ?? [0, 0, 0],
+            isMidi: s?.isMidi ?? false,
+          });
         }
-      })
+      }),
     );
 
     // Color listener (value is a Color object — convert to [r, g, b])
     await this.ringSubs.add(
       `track:${id}:color`,
       await track.addListener("color", (value: any) => {
-        const rawHex = typeof value === "number" ? value : (value?.numberRepresentation ?? value?.toJSON?.() ?? 0);
+        const rawHex =
+          typeof value === "number"
+            ? value
+            : (value?.numberRepresentation ?? value?.toJSON?.() ?? 0);
         const rgb: [number, number, number] = hexToRgb(rawHex);
         const s = this.trackStates.get(id);
         if (s) s.color = rgb;
         const i = idx();
         if (i !== undefined) {
-          this.sendMessage({ evt: "RT_INFO", i, name: s?.name ?? "", color: rgb, isMidi: s?.isMidi ?? false });
+          this.sendMessage({
+            evt: "RT_INFO",
+            i,
+            name: s?.name ?? "",
+            color: rgb,
+            isMidi: s?.isMidi ?? false,
+          });
         }
-      })
+      }),
     );
 
     // Mute — fetch current value, not stale track.raw.mute
@@ -780,7 +881,7 @@ export class RingManager {
           if (i !== undefined) {
             this.sendMessage({ evt: "RT_MUTE", i, v: value });
           }
-        })
+        }),
       );
     }
 
@@ -797,7 +898,7 @@ export class RingManager {
           if (i !== undefined) {
             this.sendMessage({ evt: "RT_SOLO", i, v: !!value });
           }
-        })
+        }),
       );
     }
 
@@ -815,7 +916,7 @@ export class RingManager {
           if (i !== undefined) {
             this.sendMessage({ evt: "RT_ARM", i, v: !!value });
           }
-        })
+        }),
       );
     }
 
@@ -838,7 +939,7 @@ export class RingManager {
           if (i !== undefined) {
             this.sendMessage({ evt: "RT_VOL", i, v: value, nv: value });
           }
-        })
+        }),
       );
 
       panningParam = await mixer.get("panning");
@@ -850,9 +951,14 @@ export class RingManager {
           if (s) s.panning = value;
           const i = idx();
           if (i !== undefined) {
-            this.sendMessage({ evt: "RT_PAN", i, v: value, nv: (value + 1) / 2 });
+            this.sendMessage({
+              evt: "RT_PAN",
+              i,
+              v: value,
+              nv: (value + 1) / 2,
+            });
           }
-        })
+        }),
       );
     }
 
@@ -872,13 +978,17 @@ export class RingManager {
             if (i !== undefined) {
               this.sendMessage({ evt: "RT_SEND", i, si, v: value, nv: value });
             }
-          })
+          }),
         );
       }
     }
 
     // Cache mixer DeviceParameter refs so set calls skip UDP round-trips
-    this.mixerCache.set(id, { volume: volumeParam, panning: panningParam, sends: sendParams });
+    this.mixerCache.set(id, {
+      volume: volumeParam,
+      panning: panningParam,
+      sends: sendParams,
+    });
 
     // Store state
     this.trackStates.set(id, state);
@@ -928,7 +1038,7 @@ export class RingManager {
             if (i !== undefined) {
               this.sendMessage({ evt: "RT_SEND", i, si, v: value, nv: value });
             }
-          })
+          }),
         );
       }
     }
@@ -958,13 +1068,35 @@ export class RingManager {
       this.sendMessage({ evt: "RT_SOLO", i, v: state.solo });
       this.sendMessage({ evt: "RT_ARM", i, v: state.arm });
       if (!state.isMidi) {
-        this.sendMessage({ evt: "RT_VOL", i, v: state.volume, nv: state.volume });
-        this.sendMessage({ evt: "RT_PAN", i, v: state.panning, nv: (state.panning + 1) / 2 });
+        this.sendMessage({
+          evt: "RT_VOL",
+          i,
+          v: state.volume,
+          nv: state.volume,
+        });
+        this.sendMessage({
+          evt: "RT_PAN",
+          i,
+          v: state.panning,
+          nv: (state.panning + 1) / 2,
+        });
       }
-      this.sendMessage({ evt: "RT_INFO", i, name: state.name, color: state.color, isMidi: state.isMidi });
+      this.sendMessage({
+        evt: "RT_INFO",
+        i,
+        name: state.name,
+        color: state.color,
+        isMidi: state.isMidi,
+      });
 
       for (let si = 0; si < state.sends.length; si++) {
-        this.sendMessage({ evt: "RT_SEND", i, si, v: state.sends[si], nv: state.sends[si] });
+        this.sendMessage({
+          evt: "RT_SEND",
+          i,
+          si,
+          v: state.sends[si],
+          nv: state.sends[si],
+        });
       }
     }
   }
@@ -974,7 +1106,9 @@ export class RingManager {
   // -----------------------------------------------------------------------
 
   private isMaster(track: Track): boolean {
-    return this.masterTrack !== undefined && track.raw.id === this.masterTrack.raw.id;
+    return (
+      this.masterTrack !== undefined && track.raw.id === this.masterTrack.raw.id
+    );
   }
 
   /**
@@ -1026,11 +1160,12 @@ export class RingManager {
       const selectedTrack = await this.ableton.song.view.get("selected_track");
       if (selectedTrack) {
         const trackIndex = this.allTracks.findIndex(
-          (t) => t.raw.id === selectedTrack.raw.id
+          (t) => t.raw.id === selectedTrack.raw.id,
         );
-        const ringIdx = trackIndex !== -1
-          ? this.ringIndexByTrackId.get(selectedTrack.raw.id) ?? -1
-          : -1;
+        const ringIdx =
+          trackIndex !== -1
+            ? (this.ringIndexByTrackId.get(selectedTrack.raw.id) ?? -1)
+            : -1;
         this.sendMessage({
           evt: "RT_SELECTED",
           index: trackIndex,
@@ -1040,11 +1175,18 @@ export class RingManager {
         });
       }
     } catch (err) {
-      console.warn("[RingManager] Failed to fetch selected track on state request:", err);
+      console.warn(
+        "[RingManager] Failed to fetch selected track on state request:",
+        err,
+      );
     }
 
     // 3. Push transport state
-    this.sendMessage({ evt: "RT_TRANSPORT", playing: this.isPlaying, recording: this.isRecording });
+    this.sendMessage({
+      evt: "RT_TRANSPORT",
+      playing: this.isPlaying,
+      recording: this.isRecording,
+    });
 
     // 4. Push currently selected parameter info
     if (this.selectedParam) {
@@ -1053,12 +1195,22 @@ export class RingManager {
         evt: "RT_PARAM",
         name: this.selectedParamName,
         v: this.selectedParamValue,
-        nv: range !== 0 ? (this.selectedParamValue - this.selectedParamMin) / range : 0,
+        nv:
+          range !== 0
+            ? (this.selectedParamValue - this.selectedParamMin) / range
+            : 0,
         min: this.selectedParamMin,
         max: this.selectedParamMax,
       });
     } else {
-      this.sendMessage({ evt: "RT_PARAM", name: "", v: 0, nv: 0, min: 0, max: 1 });
+      this.sendMessage({
+        evt: "RT_PARAM",
+        name: "",
+        v: 0,
+        nv: 0,
+        min: 0,
+        max: 1,
+      });
     }
   }
 }
@@ -1069,9 +1221,5 @@ export class RingManager {
 
 /** Convert a raw hex color integer (0xRRGGBB) to an [r, g, b] tuple. */
 function hexToRgb(hex: number): [number, number, number] {
-  return [
-    (hex >> 16) & 0xff,
-    (hex >> 8) & 0xff,
-    hex & 0xff,
-  ];
+  return [(hex >> 16) & 0xff, (hex >> 8) & 0xff, hex & 0xff];
 }

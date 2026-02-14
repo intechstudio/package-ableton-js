@@ -29,10 +29,10 @@ function printHelp() {
   console.log("\nExamples:");
   console.log("  npm run ableton:setup              # Install MIDI script");
   console.log(
-    "  npm run ableton:open-remote-scripts # Open destination folder"
+    "  npm run ableton:open-remote-scripts # Open destination folder",
   );
   console.log(
-    "  npm run ableton:open-midi-script-source # Open source folder\n"
+    "  npm run ableton:open-midi-script-source # Open source folder\n",
   );
 }
 

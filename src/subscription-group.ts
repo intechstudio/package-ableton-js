@@ -26,7 +26,10 @@ export class SubscriptionGroup {
       try {
         await existing();
       } catch (e) {
-        console.warn(`[${this.name}] Failed to unsub existing key "${key}":`, e);
+        console.warn(
+          `[${this.name}] Failed to unsub existing key "${key}":`,
+          e,
+        );
       }
     }
     this.subs.set(key, unsubFn);
@@ -73,9 +76,12 @@ export class SubscriptionGroup {
         try {
           await unsub();
         } catch (e) {
-          console.warn(`[${this.name}] Failed to unsub key "${key}" during clear:`, e);
+          console.warn(
+            `[${this.name}] Failed to unsub key "${key}" during clear:`,
+            e,
+          );
         }
-      })
+      }),
     );
   }
 
