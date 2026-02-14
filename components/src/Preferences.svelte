@@ -93,7 +93,7 @@
 <main-app>
   <div class="px-4">
     <Block>
-      <BlockTitle>AbletonJS MIDI Script Setup</BlockTitle>
+      <BlockTitle>AbletonJS Package</BlockTitle>
       <BlockBody>
         <p class="mb-4 opacity-80">
           To use AbletonJS with Grid, you need to install the MIDI script to
@@ -108,7 +108,7 @@
             Click this button to automatically copy the MIDI script to Ableton.
           </p>
           <MoltenButton
-            title={"🚀 Install MIDI Script"}
+            title={"Install MIDI Script"}
             click={installMidiScript}
           />
           {#if installationStatus}
@@ -120,10 +120,6 @@
               {installationStatus}
             </div>
           {/if}
-          <p class="mt-2 opacity-60">
-            After installation: Restart Ableton → Preferences → MIDI → Select
-            "AbletonJS"
-          </p>
         </div>
 
         <div class="border-t border-gray-700 pt-4">
@@ -148,13 +144,22 @@
       </BlockBody>
     </Block>
     <Block>
-      <BlockTitle>v1: AbletonJS Selected Track Control</BlockTitle>
+      <BlockTitle>How to get started</BlockTitle>
       <BlockBody>
-        This very first version of AbletonJS enables selected track control with
-        a VSN1 module. Use profile <strong
-          >AbletonJS Selected Track Control</strong
-        > to try it out.
+        <ul>
+          <li>Set event tracking in Grid Editor to OFF</li>
+          <li>Search the profile "AbletonJS Selected Track Control" under workflows</li>
+          <li>Upload the profile to a VSN1 module</li>
+          <li>Open up Ableton, in MIDI preferences make sure control script "AbletonJS" is present and selected</li>
+          <li>Review the profile's description for info about the available controls</li>
+        </ul>
       </BlockBody>
     </Block>
   </div>
 </main-app>
+
+<style>
+  ul {
+    list-style-type: circle;
+  }
+</style>

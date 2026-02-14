@@ -172,6 +172,11 @@ export function resetSelectedParameter() {
   ringManager?.resetSelectedParameter();
 }
 
+/** Reset the active property to its default on the track at ring index. */
+export function ringResetActiveProperty(ringIndex: number) {
+  ringManager?.resetActivePropertyValue(ringIndex);
+}
+
 /** Request a full state dump (ring tracks, selected track, selected parameter). */
 export async function requestFullState() {
   await ringManager?.requestFullState();

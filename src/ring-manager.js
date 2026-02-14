@@ -18,6 +18,7 @@
  *   { evt: "RT_INFO",  i: ringIndex, name: string, color: [r, g, b] }
  *   { evt: "RT_SELECTED", index, ringIndex, name, color: [r, g, b] }  — selected track info
  *   { evt: "RT_PARAM", name: string, v: number, min: number, max: number }  — selected parameter
+ *   { evt: "RT_TRANSPORT", playing: boolean, recording: boolean }  — transport state
  */
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
@@ -58,6 +59,9 @@ class RingManager {
         this.allTracks = [];
         /** Currently active property for `setActivePropertyValue`. */
         this.activeProperty = "volume";
+        /** Cached transport state. */
+        this.isPlaying = false;
+        this.isRecording = false;
         // -- Selected parameter state ------------------------------------------
         /** The DeviceParameter object currently selected in Ableton's UI. */
         this.selectedParam = null;
@@ -108,6 +112,20 @@ class RingManager {
                 }
             }
             catch (_) { /* no parameter selected yet */ }
+            // Transport: is_playing
+            this.isPlaying = yield this.ableton.song.get("is_playing");
+            yield this.globalSubs.add("song:is_playing", yield this.ableton.song.addListener("is_playing", (value) => {
+                this.isPlaying = !!value;
+                this.sendMessage({ evt: "RT_TRANSPORT", playing: this.isPlaying, recording: this.isRecording });
+            }));
+            // Transport: record_mode
+            this.isRecording = !!(yield this.ableton.song.get("record_mode"));
+            yield this.globalSubs.add("song:record_mode", yield this.ableton.song.addListener("record_mode", (value) => {
+                this.isRecording = !!value;
+                this.sendMessage({ evt: "RT_TRANSPORT", playing: this.isPlaying, recording: this.isRecording });
+            }));
+            // Send initial transport state
+            this.sendMessage({ evt: "RT_TRANSPORT", playing: this.isPlaying, recording: this.isRecording });
             // When the user selects a different track in Ableton, move the ring
             // to keep it visible (if it's outside the current window).
             yield this.globalSubs.add("song:view:selected_track", yield this.ableton.song.view.addListener("selected_track", (track) => __awaiter(this, void 0, void 0, function* () {
@@ -533,6 +551,32 @@ class RingManager {
             console.warn("[RingManager] Failed to reset selected parameter:", err);
         }
     }
+    /**
+     * Reset the active property to its default value on the track at a ring
+     * index. Uses Ableton's well-known defaults:
+     *   volume  → 0.85  (~0 dB)
+     *   panning → 0     (center)
+     *   send:N  → 0     (off)
+     *   selected_parameter → factory default (via resetSelectedParameter)
+     */
+    resetActivePropertyValue(ringIndex) {
+        if (this.activeProperty === "selected_parameter") {
+            this.resetSelectedParameter();
+            return;
+        }
+        if (this.activeProperty === "volume") {
+            this.setVolume(ringIndex, 0.85);
+        }
+        else if (this.activeProperty === "panning") {
+            this.setPanning(ringIndex, 0);
+        }
+        else if (this.activeProperty.startsWith("send:")) {
+            const sendIndex = parseInt(this.activeProperty.slice(5), 10);
+            if (!isNaN(sendIndex)) {
+                this.setSend(ringIndex, sendIndex, 0);
+            }
+        }
+    }
     // -----------------------------------------------------------------------
     // Core: diff-based listener sync
     // -----------------------------------------------------------------------
@@ -870,7 +914,9 @@ class RingManager {
             catch (err) {
                 console.warn("[RingManager] Failed to fetch selected track on state request:", err);
             }
-            // 3. Push currently selected parameter info
+            // 3. Push transport state
+            this.sendMessage({ evt: "RT_TRANSPORT", playing: this.isPlaying, recording: this.isRecording });
+            // 4. Push currently selected parameter info
             if (this.selectedParam) {
                 const range = this.selectedParamMax - this.selectedParamMin;
                 this.sendMessage({
