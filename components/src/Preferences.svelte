@@ -98,11 +98,16 @@
         <BlockTitle>How to get started:</BlockTitle>
         <BlockBody>
           <ul>
-            <li>Install the AbletonJS script with the buttons below or manually</li>
-            <li>Set interaction tracking in Grid Editor to OFF, setting found in the center-bottom area (this is required for performance reasons!)</li>
             <li>
-              Search the Profile Cloud for "AbletonJS Selected Track Control" under
-              Workflows section
+              Install the AbletonJS script with the buttons below or manually
+            </li>
+            <li>
+              Set interaction tracking in Grid Editor to OFF, setting found in
+              the center-bottom area (this is required for performance reasons!)
+            </li>
+            <li>
+              Search the Profile Cloud for "AbletonJS Selected Track Control"
+              under Workflows section
             </li>
             <li>Upload the profile to a VSN1 module</li>
             <li>
@@ -160,13 +165,12 @@
         </div>
       </BlockBody>
     </Block>
-    
   </div>
 </main-app>
 
 <style>
   ul {
     list-style-type: circle;
-    padding-left:8px;
+    padding-left: 8px;
   }
 </style>
