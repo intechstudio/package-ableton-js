@@ -136,8 +136,15 @@ function main() {
     console.log('   3. Select "AbletonJS" as a Control Surface\n');
   } catch (error) {
     console.error("❌ Error:", error.message);
-    process.exit(1);
+    if (require.main === module) {
+      process.exit(1);
+    }
+    throw error;
   }
 }
 
-main();
+module.exports = { main };
+
+if (require.main === module) {
+  main();
+}

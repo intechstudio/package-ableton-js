@@ -7,7 +7,6 @@ let messagePorts = new Set();
 let windowMessagePort;
 
 const ableton = require("./src/index.js");
-const { execSync } = require("child_process");
 const path = require("path");
 
 exports.loadPackage = async function (gridController, persistedData) {
@@ -76,7 +75,8 @@ exports.addMessagePort = async function (port, senderId) {
             __dirname,
             "scripts/copy-midi-script.js",
           );
-          execSync(`node "${scriptPath}"`, { stdio: "inherit" });
+          const copyMidiScript = require(scriptPath);
+          copyMidiScript.main();
           port.postMessage({
             type: "midi-script-status",
             success: true,
@@ -99,7 +99,8 @@ exports.addMessagePort = async function (port, senderId) {
             __dirname,
             "scripts/open-remote-scripts.js",
           );
-          execSync(`node "${scriptPath}"`, { stdio: "inherit" });
+          const openRemoteScripts = require(scriptPath);
+          openRemoteScripts.main();
         } catch (error) {
           console.error("Error opening Remote Scripts folder:", error);
         }
@@ -111,7 +112,8 @@ exports.addMessagePort = async function (port, senderId) {
             __dirname,
             "scripts/open-midi-script-source.js",
           );
-          execSync(`node "${scriptPath}"`, { stdio: "inherit" });
+          const openMidiScriptSource = require(scriptPath);
+          openMidiScriptSource.main();
         } catch (error) {
           console.error("Error opening MIDI script source:", error);
         }
