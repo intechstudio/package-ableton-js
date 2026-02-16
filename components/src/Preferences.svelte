@@ -94,12 +94,29 @@
   <div class="px-4">
     <Block>
       <BlockTitle>AbletonJS Package</BlockTitle>
+      <Block>
+        <BlockTitle>How to get started:</BlockTitle>
+        <BlockBody>
+          <ul>
+            <li>Install the AbletonJS script with the buttons below or manually</li>
+            <li>Set interaction tracking in Grid Editor to OFF, setting found in the center-bottom area (this is required for performance reasons!)</li>
+            <li>
+              Search the Profile Cloud for "AbletonJS Selected Track Control" under
+              Workflows section
+            </li>
+            <li>Upload the profile to a VSN1 module</li>
+            <li>
+              Open up Ableton, in MIDI preferences make sure control script
+              "AbletonJS" is present and selected
+            </li>
+            <li>
+              Review the profile's description for info about the available
+              controls
+            </li>
+          </ul>
+        </BlockBody>
+      </Block>
       <BlockBody>
-        <p class="mb-4 opacity-80">
-          To use AbletonJS with Grid, you need to install the MIDI script to
-          your Ableton Remote Scripts folder.
-        </p>
-
         <div class="mb-4">
           <h3 class="text-sm font-semibold mb-2">
             📦 Automatic Installation (Recommended)
@@ -143,32 +160,13 @@
         </div>
       </BlockBody>
     </Block>
-    <Block>
-      <BlockTitle>How to get started</BlockTitle>
-      <BlockBody>
-        <ul>
-          <li>Set event tracking in Grid Editor to OFF</li>
-          <li>
-            Search the profile "AbletonJS Selected Track Control" under
-            workflows
-          </li>
-          <li>Upload the profile to a VSN1 module</li>
-          <li>
-            Open up Ableton, in MIDI preferences make sure control script
-            "AbletonJS" is present and selected
-          </li>
-          <li>
-            Review the profile's description for info about the available
-            controls
-          </li>
-        </ul>
-      </BlockBody>
-    </Block>
+    
   </div>
 </main-app>
 
 <style>
   ul {
     list-style-type: circle;
+    padding-left:8px;
   }
 </style>
