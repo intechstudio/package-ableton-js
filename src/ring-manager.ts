@@ -16,6 +16,7 @@
  *   { evt: "RT_SEND",  i: ringIndex, si: sendIndex, v: number }
  *   { evt: "RT_INFO",  i: ringIndex, name: string, color: [r, g, b] }
  *   { evt: "RT_SELECTED", index, ringIndex, name, color: [r, g, b] }  — selected track info
+ *   { evt: "RT_PLAYING_CLIP", name: string, color: [r, g, b] }  — currently playing clip on selected track
  *   { evt: "RT_PARAM", name: string, v: number, min: number, max: number }  — selected parameter
  *   { evt: "RT_TRANSPORT", playing: boolean, recording: boolean }  — transport state
  */
@@ -97,6 +98,22 @@ export class RingManager {
   /** Cached transport state. */
   private isPlaying: boolean = false;
   private isRecording: boolean = false;
+
+  // -- Selected track live state (fixes stale raw.name bug) ---------------
+
+  /** Live-cached name of the currently selected track. */
+  private selectedTrackName: string = "";
+  /** Live-cached color of the currently selected track. */
+  private selectedTrackColor: [number, number, number] = [0, 0, 0];
+  /** Index of the currently selected track in allTracks. */
+  private selectedTrackIndex: number = -1;
+
+  // -- Playing clip state (selected track) --------------------------------
+
+  /** Name of the currently playing clip on the selected track. */
+  private playingClipName: string = "";
+  /** Color of the currently playing clip on the selected track. */
+  private playingClipColor: [number, number, number] = [0, 0, 0];
 
   // -- Selected parameter state ------------------------------------------
 
@@ -222,18 +239,10 @@ export class RingManager {
           if (trackIndex !== -1) {
             await this.followTrackIndex(trackIndex);
           }
-          // Notify Grid of the selected track's info
-          const ringIdx =
-            trackIndex !== -1
-              ? (this.ringIndexByTrackId.get(track.raw.id) ?? -1)
-              : -1;
-          this.sendMessage({
-            evt: "RT_SELECTED",
-            index: trackIndex,
-            ringIndex: ringIdx,
-            name: track.raw.name,
-            color: hexToRgb(track.raw.color),
-          });
+          this.selectedTrackIndex = trackIndex;
+          // Subscribe to live name/color updates and playing clip for the new selected track
+          await this.subscribeSelectedTrack(track);
+          await this.subscribePlayingClip(track);
         },
       ),
     );
@@ -295,6 +304,11 @@ export class RingManager {
     this.trackStates.clear();
     this.mixerCache.clear();
     this.selectedParam = null;
+    this.selectedTrackName = "";
+    this.selectedTrackColor = [0, 0, 0];
+    this.selectedTrackIndex = -1;
+    this.playingClipName = "";
+    this.playingClipColor = [0, 0, 0];
   }
 
   // -----------------------------------------------------------------------
@@ -737,6 +751,204 @@ export class RingManager {
   }
 
   // -----------------------------------------------------------------------
+  // Selected track live subscriptions (fixes stale raw.name bug)
+  // -----------------------------------------------------------------------
+
+  /**
+   * Subscribe to live name and color changes on the selected track.
+   * This replaces the stale `track.raw.name` snapshot with a live listener
+   * so that renames are immediately reflected in RT_SELECTED events.
+   */
+  private async subscribeSelectedTrack(track: Track): Promise<void> {
+    // Tear down previous selected-track property listeners
+    await this.globalSubs.removeByPrefix("selected_track_prop");
+
+    // Fetch live name (not stale raw snapshot)
+    this.selectedTrackName = await track.get("name");
+    this.selectedTrackColor = hexToRgb(track.raw.color);
+
+    const trackId = track.raw.id;
+
+    // Send initial RT_SELECTED with the live name
+    const ringIdx = this.ringIndexByTrackId.get(trackId) ?? -1;
+    this.sendMessage({
+      evt: "RT_SELECTED",
+      index: this.selectedTrackIndex,
+      ringIndex: ringIdx,
+      name: this.selectedTrackName,
+      color: this.selectedTrackColor,
+    });
+
+    // Live name listener — fires when the selected track is renamed
+    await this.globalSubs.add(
+      "selected_track_prop:name",
+      await track.addListener("name", (value) => {
+        this.selectedTrackName = value;
+        const ri = this.ringIndexByTrackId.get(trackId) ?? -1;
+        this.sendMessage({
+          evt: "RT_SELECTED",
+          index: this.selectedTrackIndex,
+          ringIndex: ri,
+          name: value,
+          color: this.selectedTrackColor,
+        });
+      }),
+    );
+
+    // Live color listener — fires when the selected track's color changes
+    await this.globalSubs.add(
+      "selected_track_prop:color",
+      await track.addListener("color", (value: any) => {
+        const rawHex =
+          typeof value === "number"
+            ? value
+            : (value?.numberRepresentation ?? value?.toJSON?.() ?? 0);
+        this.selectedTrackColor = hexToRgb(rawHex);
+        const ri = this.ringIndexByTrackId.get(trackId) ?? -1;
+        this.sendMessage({
+          evt: "RT_SELECTED",
+          index: this.selectedTrackIndex,
+          ringIndex: ri,
+          name: this.selectedTrackName,
+          color: this.selectedTrackColor,
+        });
+      }),
+    );
+  }
+
+  // -----------------------------------------------------------------------
+  // Playing clip on selected track
+  // -----------------------------------------------------------------------
+
+  /**
+   * Subscribe to the playing clip on the selected track.
+   * Watches `playing_slot_index` to detect which clip is playing,
+   * then subscribes to that clip's name and color for live updates.
+   * Sends RT_PLAYING_CLIP events to Grid.
+   */
+  private async subscribePlayingClip(track: Track): Promise<void> {
+    // Tear down previous playing-clip listeners
+    await this.globalSubs.removeByPrefix("selected_track_clip");
+    this.playingClipName = "";
+    this.playingClipColor = [0, 0, 0];
+
+    const handleSlotIndex = async (slotIndex: number) => {
+      // Remove any previous clip-property listeners
+      await this.globalSubs.removeByPrefix("selected_track_clip:props");
+
+      if (slotIndex < 0) {
+        // No clip playing (Ableton returns -2 when stopped)
+        this.playingClipName = "";
+        this.playingClipColor = [0, 0, 0];
+        this.sendMessage({
+          evt: "RT_PLAYING_CLIP",
+          name: "",
+          color: [0, 0, 0],
+        });
+        return;
+      }
+
+      try {
+        const clipSlots = await track.get("clip_slots");
+        if (!clipSlots || slotIndex >= clipSlots.length) return;
+
+        const clip = await clipSlots[slotIndex].get("clip");
+        if (!clip) {
+          this.playingClipName = "";
+          this.playingClipColor = [0, 0, 0];
+          this.sendMessage({
+            evt: "RT_PLAYING_CLIP",
+            name: "",
+            color: [0, 0, 0],
+          });
+          return;
+        }
+
+        // Fetch clip name and color
+        const [clipName, clipColor] = await Promise.all([
+          clip.get("name"),
+          clip.get("color"),
+        ]);
+
+        const colorRgb: [number, number, number] = clipColor?.rgb
+          ? [clipColor.rgb.r ?? 0, clipColor.rgb.g ?? 0, clipColor.rgb.b ?? 0]
+          : typeof clipColor === "number"
+            ? hexToRgb(clipColor)
+            : [0, 0, 0];
+
+        this.playingClipName = clipName ?? "";
+        this.playingClipColor = colorRgb;
+        this.sendMessage({
+          evt: "RT_PLAYING_CLIP",
+          name: this.playingClipName,
+          color: this.playingClipColor,
+        });
+
+        // Listen for live clip name changes
+        await this.globalSubs.add(
+          "selected_track_clip:props:name",
+          await clip.addListener("name", (value) => {
+            this.playingClipName = value;
+            this.sendMessage({
+              evt: "RT_PLAYING_CLIP",
+              name: value,
+              color: this.playingClipColor,
+            });
+          }),
+        );
+
+        // Listen for live clip color changes
+        await this.globalSubs.add(
+          "selected_track_clip:props:color",
+          await clip.addListener("color", (value: any) => {
+            const rgb: [number, number, number] = value?.rgb
+              ? [value.rgb.r ?? 0, value.rgb.g ?? 0, value.rgb.b ?? 0]
+              : typeof value === "number"
+                ? hexToRgb(value)
+                : (() => {
+                    const rawHex =
+                      value?.numberRepresentation ?? value?.toJSON?.() ?? 0;
+                    return hexToRgb(rawHex);
+                  })();
+            this.playingClipColor = rgb;
+            this.sendMessage({
+              evt: "RT_PLAYING_CLIP",
+              name: this.playingClipName,
+              color: rgb,
+            });
+          }),
+        );
+      } catch (err) {
+        console.warn("[RingManager] Failed to fetch playing clip info:", err);
+      }
+    };
+
+    // Listen for playing slot changes on the selected track
+    await this.globalSubs.add(
+      "selected_track_clip:slot",
+      await track.addListener(
+        "playing_slot_index",
+        async (slotIndex: number) => {
+          await handleSlotIndex(slotIndex);
+        },
+      ),
+    );
+
+    // Fetch the initial playing slot
+    try {
+      const initialSlot = await track.get("playing_slot_index");
+      await handleSlotIndex(initialSlot);
+    } catch (_) {
+      // No slot playing initially — send empty
+      this.sendMessage({
+        evt: "RT_PLAYING_CLIP",
+        name: "",
+        color: [0, 0, 0],
+      });
+    }
+  }
+
+  // -----------------------------------------------------------------------
   // Core: diff-based listener sync
   // -----------------------------------------------------------------------
 
@@ -811,10 +1023,11 @@ export class RingManager {
 
     // Initialize state — fetch ALL values fresh from Ableton, never use
     // stale track.raw snapshots for mutable properties.
+    const liveName = await track.get("name");
     const state: RingTrackState = {
       id,
       ringIndex: idx() ?? 0,
-      name: track.raw.name,
+      name: liveName,
       color: hexToRgb(track.raw.color),
       isMidi: trackIsMidi,
       mute: false,
@@ -1155,7 +1368,7 @@ export class RingManager {
     // 1. Push all ring track states
     this.sendFullSync();
 
-    // 2. Push currently selected track info
+    // 2. Push currently selected track info (uses live-cached values)
     try {
       const selectedTrack = await this.ableton.song.view.get("selected_track");
       if (selectedTrack) {
@@ -1166,12 +1379,13 @@ export class RingManager {
           trackIndex !== -1
             ? (this.ringIndexByTrackId.get(selectedTrack.raw.id) ?? -1)
             : -1;
+        this.selectedTrackIndex = trackIndex;
         this.sendMessage({
           evt: "RT_SELECTED",
           index: trackIndex,
           ringIndex: ringIdx,
-          name: selectedTrack.raw.name,
-          color: hexToRgb(selectedTrack.raw.color),
+          name: this.selectedTrackName,
+          color: this.selectedTrackColor,
         });
       }
     } catch (err) {
@@ -1181,7 +1395,14 @@ export class RingManager {
       );
     }
 
-    // 3. Push transport state
+    // 3. Push playing clip state
+    this.sendMessage({
+      evt: "RT_PLAYING_CLIP",
+      name: this.playingClipName,
+      color: this.playingClipColor,
+    });
+
+    // 4. Push transport state
     this.sendMessage({
       evt: "RT_TRANSPORT",
       playing: this.isPlaying,
