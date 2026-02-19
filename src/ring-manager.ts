@@ -290,6 +290,8 @@ export class RingManager {
     );
     if (newOffset !== this.trackOffset) {
       await this.setOffset(newOffset, this.sceneOffset);
+      // Also update Ableton's selected track so the session view follows the ring
+      this.selectTrackInRing(0);
     }
   }
 
