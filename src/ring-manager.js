@@ -56,7 +56,8 @@ class RingManager {
         this.ringScenes = 0;
         this.trackOffset = 0;
         this.sceneOffset = 0;
-        /** All tracks in the session — cached, refreshed on `tracks` listener. */
+        /** Visible tracks in the session — excludes children of folded groups.
+         *  Re-fetched on track list changes and before each ring navigation. */
         this.allTracks = [];
         /** Currently active property for `setActivePropertyValue`. */
         this.activeProperty = "volume";
@@ -90,6 +91,16 @@ class RingManager {
         this.ableton = ableton;
         this.sendMessage = sendMessage;
     }
+    /**
+     * Fetch only the tracks currently visible in Ableton's session view.
+     * Folded group children are excluded. Called on init, on track list
+     * changes, and before each ring navigation to pick up fold changes.
+     */
+    refreshVisibleTracks() {
+        return __awaiter(this, void 0, void 0, function* () {
+            this.allTracks = yield this.ableton.song.get("visible_tracks");
+        });
+    }
     // -----------------------------------------------------------------------
     // Lifecycle
     // -----------------------------------------------------------------------
@@ -101,10 +112,11 @@ class RingManager {
     init() {
         return __awaiter(this, void 0, void 0, function* () {
             this.masterTrack = yield this.ableton.song.get("master_track");
-            this.allTracks = yield this.ableton.song.get("tracks");
+            yield this.refreshVisibleTracks();
             // When tracks are added or removed in Ableton, refresh and re-sync.
-            yield this.globalSubs.add("song:tracks", yield this.ableton.song.addListener("tracks", (tracks) => __awaiter(this, void 0, void 0, function* () {
-                this.allTracks = tracks;
+            yield this.globalSubs.add("song:tracks", yield this.ableton.song.addListener("tracks", (_tracks) => __awaiter(this, void 0, void 0, function* () {
+                // Re-fetch visible_tracks (the callback arg includes hidden tracks)
+                yield this.refreshVisibleTracks();
                 yield this.syncRingListeners();
             })));
             // When return tracks change, send counts may change — re-subscribe sends
@@ -200,6 +212,8 @@ class RingManager {
      */
     navigateRing(direction) {
         return __awaiter(this, void 0, void 0, function* () {
+            // Refresh visible tracks to pick up any fold/unfold changes
+            yield this.refreshVisibleTracks();
             const delta = direction === "right" ? 1 : -1;
             const maxOffset = Math.max(0, this.allTracks.length - this.ringWidth);
             const newOffset = Math.max(0, Math.min(this.trackOffset + delta, maxOffset));
@@ -1178,6 +1192,9 @@ class RingManager {
     requestFullState() {
         return __awaiter(this, void 0, void 0, function* () {
             var _a;
+            // Refresh visible tracks to pick up any fold/unfold changes
+            yield this.refreshVisibleTracks();
+            yield this.syncRingListeners();
             // 1. Push all ring track states
             this.sendFullSync();
             // 2. Push currently selected track info (uses live-cached values)

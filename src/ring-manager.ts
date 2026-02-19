@@ -89,7 +89,8 @@ export class RingManager {
   /** Master track reference (no mute/solo/arm on master). */
   private masterTrack: Track | undefined;
 
-  /** All tracks in the session — cached, refreshed on `tracks` listener. */
+  /** Visible tracks in the session — excludes children of folded groups.
+   *  Re-fetched on track list changes and before each ring navigation. */
   private allTracks: Track[] = [];
 
   /** Currently active property for `setActivePropertyValue`. */
@@ -136,6 +137,15 @@ export class RingManager {
     this.sendMessage = sendMessage;
   }
 
+  /**
+   * Fetch only the tracks currently visible in Ableton's session view.
+   * Folded group children are excluded. Called on init, on track list
+   * changes, and before each ring navigation to pick up fold changes.
+   */
+  private async refreshVisibleTracks(): Promise<void> {
+    this.allTracks = await this.ableton.song.get("visible_tracks");
+  }
+
   // -----------------------------------------------------------------------
   // Lifecycle
   // -----------------------------------------------------------------------
@@ -147,13 +157,14 @@ export class RingManager {
    */
   async init(): Promise<void> {
     this.masterTrack = await this.ableton.song.get("master_track");
-    this.allTracks = await this.ableton.song.get("tracks");
+    await this.refreshVisibleTracks();
 
     // When tracks are added or removed in Ableton, refresh and re-sync.
     await this.globalSubs.add(
       "song:tracks",
-      await this.ableton.song.addListener("tracks", async (tracks) => {
-        this.allTracks = tracks;
+      await this.ableton.song.addListener("tracks", async (_tracks) => {
+        // Re-fetch visible_tracks (the callback arg includes hidden tracks)
+        await this.refreshVisibleTracks();
         await this.syncRingListeners();
       }),
     );
@@ -282,6 +293,8 @@ export class RingManager {
    * Move the ring left or right by 1 track.
    */
   async navigateRing(direction: "left" | "right"): Promise<void> {
+    // Refresh visible tracks to pick up any fold/unfold changes
+    await this.refreshVisibleTracks();
     const delta = direction === "right" ? 1 : -1;
     const maxOffset = Math.max(0, this.allTracks.length - this.ringWidth);
     const newOffset = Math.max(
@@ -1367,6 +1380,10 @@ export class RingManager {
    * Call this from Grid on module init / reconnect.
    */
   async requestFullState(): Promise<void> {
+    // Refresh visible tracks to pick up any fold/unfold changes
+    await this.refreshVisibleTracks();
+    await this.syncRingListeners();
+
     // 1. Push all ring track states
     this.sendFullSync();
 
