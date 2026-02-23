@@ -163,9 +163,13 @@ export class RingManager {
     await this.globalSubs.add(
       "song:tracks",
       await this.ableton.song.addListener("tracks", async (_tracks) => {
-        // Re-fetch visible_tracks (the callback arg includes hidden tracks)
-        await this.refreshVisibleTracks();
-        await this.syncRingListeners();
+        try {
+          // Re-fetch visible_tracks (the callback arg includes hidden tracks)
+          await this.refreshVisibleTracks();
+          await this.syncRingListeners();
+        } catch (err) {
+          console.warn("[RingManager] Error handling tracks change:", err);
+        }
       }),
     );
 
@@ -174,7 +178,11 @@ export class RingManager {
     await this.globalSubs.add(
       "song:return_tracks",
       await this.ableton.song.addListener("return_tracks", async () => {
-        await this.resubscribeSendsForAllRingTracks();
+        try {
+          await this.resubscribeSendsForAllRingTracks();
+        } catch (err) {
+          console.warn("[RingManager] Error handling return_tracks change:", err);
+        }
       }),
     );
 
@@ -185,7 +193,11 @@ export class RingManager {
       await this.ableton.song.view.addListener(
         "selected_parameter",
         async (param) => {
-          await this.onSelectedParameterChanged(param);
+          try {
+            await this.onSelectedParameterChanged(param);
+          } catch (err) {
+            console.warn("[RingManager] Error handling selected_parameter change:", err);
+          }
         },
       ),
     );
@@ -243,17 +255,21 @@ export class RingManager {
       await this.ableton.song.view.addListener(
         "selected_track",
         async (track) => {
-          if (!track) return;
-          const trackIndex = this.allTracks.findIndex(
-            (t) => t.raw.id === track.raw.id,
-          );
-          if (trackIndex !== -1) {
-            await this.followTrackIndex(trackIndex);
+          try {
+            if (!track) return;
+            const trackIndex = this.allTracks.findIndex(
+              (t) => t.raw.id === track.raw.id,
+            );
+            if (trackIndex !== -1) {
+              await this.followTrackIndex(trackIndex);
+            }
+            this.selectedTrackIndex = trackIndex;
+            // Subscribe to live name/color updates and playing clip for the new selected track
+            await this.subscribeSelectedTrack(track);
+            await this.subscribePlayingClip(track);
+          } catch (err) {
+            console.warn("[RingManager] Error handling selected_track change:", err);
           }
-          this.selectedTrackIndex = trackIndex;
-          // Subscribe to live name/color updates and playing clip for the new selected track
-          await this.subscribeSelectedTrack(track);
-          await this.subscribePlayingClip(track);
         },
       ),
     );
@@ -944,7 +960,11 @@ export class RingManager {
       await track.addListener(
         "playing_slot_index",
         async (slotIndex: number) => {
-          await handleSlotIndex(slotIndex);
+          try {
+            await handleSlotIndex(slotIndex);
+          } catch (err) {
+            console.warn("[RingManager] Error handling playing_slot_index change:", err);
+          }
         },
       ),
     );
@@ -999,7 +1019,14 @@ export class RingManager {
     // Tracks that entered the ring — subscribe
     const added = windowTracks.filter((t) => !oldIds.has(t.raw.id));
     for (const track of added) {
-      await this.subscribeRingTrack(track);
+      try {
+        await this.subscribeRingTrack(track);
+      } catch (err) {
+        console.warn(
+          `[RingManager] Failed to subscribe to track ${track.raw.id} (may be invisible):`,
+          err,
+        );
+      }
     }
 
     // Update the current ring track IDs
@@ -1239,34 +1266,41 @@ export class RingManager {
       const track = this.allTracks.find((t) => t.raw.id === trackId);
       if (!track || this.isMaster(track)) continue;
 
-      const mixer = await track.get("mixer_device");
-      const sends = await mixer.get("sends");
-      const state = this.trackStates.get(trackId);
+      try {
+        const mixer = await track.get("mixer_device");
+        const sends = await mixer.get("sends");
+        const state = this.trackStates.get(trackId);
 
-      if (state) {
-        state.sends = sends.map((s) => s.raw.value);
-      }
+        if (state) {
+          state.sends = sends.map((s) => s.raw.value);
+        }
 
-      // Update mixer cache with new sends
-      const cached = this.mixerCache.get(trackId);
-      if (cached) {
-        cached.sends = sends;
-      }
+        // Update mixer cache with new sends
+        const cached = this.mixerCache.get(trackId);
+        if (cached) {
+          cached.sends = sends;
+        }
 
-      const idx = () => this.ringIndexByTrackId.get(trackId);
+        const idx = () => this.ringIndexByTrackId.get(trackId);
 
-      for (let si = 0; si < sends.length; si++) {
-        const send = sends[si];
-        await this.ringSubs.add(
-          `track:${trackId}:send:${si}`,
-          await send.addListener("value", (value) => {
-            const s = this.trackStates.get(trackId);
-            if (s) s.sends[si] = value;
-            const i = idx();
-            if (i !== undefined) {
-              this.sendMessage({ evt: "RT_SEND", i, si, v: value, nv: value });
-            }
-          }),
+        for (let si = 0; si < sends.length; si++) {
+          const send = sends[si];
+          await this.ringSubs.add(
+            `track:${trackId}:send:${si}`,
+            await send.addListener("value", (value) => {
+              const s = this.trackStates.get(trackId);
+              if (s) s.sends[si] = value;
+              const i = idx();
+              if (i !== undefined) {
+                this.sendMessage({ evt: "RT_SEND", i, si, v: value, nv: value });
+              }
+            }),
+          );
+        }
+      } catch (err) {
+        console.warn(
+          `[RingManager] Failed to resubscribe sends for track ${trackId} (may be invisible):`,
+          err,
         );
       }
     }
