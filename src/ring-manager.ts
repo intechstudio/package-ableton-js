@@ -181,7 +181,10 @@ export class RingManager {
         try {
           await this.resubscribeSendsForAllRingTracks();
         } catch (err) {
-          console.warn("[RingManager] Error handling return_tracks change:", err);
+          console.warn(
+            "[RingManager] Error handling return_tracks change:",
+            err,
+          );
         }
       }),
     );
@@ -196,7 +199,10 @@ export class RingManager {
           try {
             await this.onSelectedParameterChanged(param);
           } catch (err) {
-            console.warn("[RingManager] Error handling selected_parameter change:", err);
+            console.warn(
+              "[RingManager] Error handling selected_parameter change:",
+              err,
+            );
           }
         },
       ),
@@ -268,7 +274,10 @@ export class RingManager {
             await this.subscribeSelectedTrack(track);
             await this.subscribePlayingClip(track);
           } catch (err) {
-            console.warn("[RingManager] Error handling selected_track change:", err);
+            console.warn(
+              "[RingManager] Error handling selected_track change:",
+              err,
+            );
           }
         },
       ),
@@ -963,7 +972,10 @@ export class RingManager {
           try {
             await handleSlotIndex(slotIndex);
           } catch (err) {
-            console.warn("[RingManager] Error handling playing_slot_index change:", err);
+            console.warn(
+              "[RingManager] Error handling playing_slot_index change:",
+              err,
+            );
           }
         },
       ),
@@ -1292,7 +1304,13 @@ export class RingManager {
               if (s) s.sends[si] = value;
               const i = idx();
               if (i !== undefined) {
-                this.sendMessage({ evt: "RT_SEND", i, si, v: value, nv: value });
+                this.sendMessage({
+                  evt: "RT_SEND",
+                  i,
+                  si,
+                  v: value,
+                  nv: value,
+                });
               }
             }),
           );
