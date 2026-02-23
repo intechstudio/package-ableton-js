@@ -142,9 +142,13 @@ class RingManager {
         "song:tracks",
         yield this.ableton.song.addListener("tracks", (_tracks) =>
           __awaiter(this, void 0, void 0, function* () {
-            // Re-fetch visible_tracks (the callback arg includes hidden tracks)
-            yield this.refreshVisibleTracks();
-            yield this.syncRingListeners();
+            try {
+              // Re-fetch visible_tracks (the callback arg includes hidden tracks)
+              yield this.refreshVisibleTracks();
+              yield this.syncRingListeners();
+            } catch (err) {
+              console.warn("[RingManager] Error handling tracks change:", err);
+            }
           }),
         ),
       );
@@ -154,7 +158,14 @@ class RingManager {
         "song:return_tracks",
         yield this.ableton.song.addListener("return_tracks", () =>
           __awaiter(this, void 0, void 0, function* () {
-            yield this.resubscribeSendsForAllRingTracks();
+            try {
+              yield this.resubscribeSendsForAllRingTracks();
+            } catch (err) {
+              console.warn(
+                "[RingManager] Error handling return_tracks change:",
+                err,
+              );
+            }
           }),
         ),
       );
@@ -166,7 +177,14 @@ class RingManager {
           "selected_parameter",
           (param) =>
             __awaiter(this, void 0, void 0, function* () {
-              yield this.onSelectedParameterChanged(param);
+              try {
+                yield this.onSelectedParameterChanged(param);
+              } catch (err) {
+                console.warn(
+                  "[RingManager] Error handling selected_parameter change:",
+                  err,
+                );
+              }
             }),
         ),
       );
@@ -218,17 +236,24 @@ class RingManager {
         "song:view:selected_track",
         yield this.ableton.song.view.addListener("selected_track", (track) =>
           __awaiter(this, void 0, void 0, function* () {
-            if (!track) return;
-            const trackIndex = this.allTracks.findIndex(
-              (t) => t.raw.id === track.raw.id,
-            );
-            if (trackIndex !== -1) {
-              yield this.followTrackIndex(trackIndex);
+            try {
+              if (!track) return;
+              const trackIndex = this.allTracks.findIndex(
+                (t) => t.raw.id === track.raw.id,
+              );
+              if (trackIndex !== -1) {
+                yield this.followTrackIndex(trackIndex);
+              }
+              this.selectedTrackIndex = trackIndex;
+              // Subscribe to live name/color updates and playing clip for the new selected track
+              yield this.subscribeSelectedTrack(track);
+              yield this.subscribePlayingClip(track);
+            } catch (err) {
+              console.warn(
+                "[RingManager] Error handling selected_track change:",
+                err,
+              );
             }
-            this.selectedTrackIndex = trackIndex;
-            // Subscribe to live name/color updates and playing clip for the new selected track
-            yield this.subscribeSelectedTrack(track);
-            yield this.subscribePlayingClip(track);
           }),
         ),
       );
@@ -936,7 +961,14 @@ class RingManager {
         "selected_track_clip:slot",
         yield track.addListener("playing_slot_index", (slotIndex) =>
           __awaiter(this, void 0, void 0, function* () {
-            yield handleSlotIndex(slotIndex);
+            try {
+              yield handleSlotIndex(slotIndex);
+            } catch (err) {
+              console.warn(
+                "[RingManager] Error handling playing_slot_index change:",
+                err,
+              );
+            }
           }),
         ),
       );
@@ -989,7 +1021,14 @@ class RingManager {
       // Tracks that entered the ring — subscribe
       const added = windowTracks.filter((t) => !oldIds.has(t.raw.id));
       for (const track of added) {
-        yield this.subscribeRingTrack(track);
+        try {
+          yield this.subscribeRingTrack(track);
+        } catch (err) {
+          console.warn(
+            `[RingManager] Failed to subscribe to track ${track.raw.id} (may be invisible):`,
+            err,
+          );
+        }
       }
       // Update the current ring track IDs
       this.currentRingTrackIds = newIds;
@@ -1247,36 +1286,43 @@ class RingManager {
         // Find the track object
         const track = this.allTracks.find((t) => t.raw.id === trackId);
         if (!track || this.isMaster(track)) continue;
-        const mixer = yield track.get("mixer_device");
-        const sends = yield mixer.get("sends");
-        const state = this.trackStates.get(trackId);
-        if (state) {
-          state.sends = sends.map((s) => s.raw.value);
-        }
-        // Update mixer cache with new sends
-        const cached = this.mixerCache.get(trackId);
-        if (cached) {
-          cached.sends = sends;
-        }
-        const idx = () => this.ringIndexByTrackId.get(trackId);
-        for (let si = 0; si < sends.length; si++) {
-          const send = sends[si];
-          yield this.ringSubs.add(
-            `track:${trackId}:send:${si}`,
-            yield send.addListener("value", (value) => {
-              const s = this.trackStates.get(trackId);
-              if (s) s.sends[si] = value;
-              const i = idx();
-              if (i !== undefined) {
-                this.sendMessage({
-                  evt: "RT_SEND",
-                  i,
-                  si,
-                  v: value,
-                  nv: value,
-                });
-              }
-            }),
+        try {
+          const mixer = yield track.get("mixer_device");
+          const sends = yield mixer.get("sends");
+          const state = this.trackStates.get(trackId);
+          if (state) {
+            state.sends = sends.map((s) => s.raw.value);
+          }
+          // Update mixer cache with new sends
+          const cached = this.mixerCache.get(trackId);
+          if (cached) {
+            cached.sends = sends;
+          }
+          const idx = () => this.ringIndexByTrackId.get(trackId);
+          for (let si = 0; si < sends.length; si++) {
+            const send = sends[si];
+            yield this.ringSubs.add(
+              `track:${trackId}:send:${si}`,
+              yield send.addListener("value", (value) => {
+                const s = this.trackStates.get(trackId);
+                if (s) s.sends[si] = value;
+                const i = idx();
+                if (i !== undefined) {
+                  this.sendMessage({
+                    evt: "RT_SEND",
+                    i,
+                    si,
+                    v: value,
+                    nv: value,
+                  });
+                }
+              }),
+            );
+          }
+        } catch (err) {
+          console.warn(
+            `[RingManager] Failed to resubscribe sends for track ${trackId} (may be invisible):`,
+            err,
           );
         }
       }
