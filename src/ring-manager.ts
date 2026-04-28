@@ -406,8 +406,6 @@ export class RingManager {
   setVolume(ringIndex: number, value: number): void {
     const track = this.getTrackAtRingIndex(ringIndex);
     if (!track) return;
-    const state = this.trackStates.get(track.raw.id);
-    if (state?.isMidi) return;
     const cached = this.mixerCache.get(track.raw.id);
     if (!cached) return;
     cached.volume.set("value", value);
@@ -420,8 +418,6 @@ export class RingManager {
   setPanning(ringIndex: number, value: number): void {
     const track = this.getTrackAtRingIndex(ringIndex);
     if (!track) return;
-    const state = this.trackStates.get(track.raw.id);
-    if (state?.isMidi) return;
     const cached = this.mixerCache.get(track.raw.id);
     if (!cached) return;
     cached.panning.set("value", value);
@@ -496,14 +492,14 @@ export class RingManager {
         if (!state) continue;
         const i = this.ringIndexByTrackId.get(trackId) ?? 0;
 
-        if (this.activeProperty === "volume" && !state.isMidi) {
+        if (this.activeProperty === "volume") {
           this.sendMessage({
             evt: "RT_VOL",
             i,
             v: state.volume,
             nv: state.volume,
           });
-        } else if (this.activeProperty === "panning" && !state.isMidi) {
+        } else if (this.activeProperty === "panning") {
           this.sendMessage({
             evt: "RT_PAN",
             i,
@@ -1190,12 +1186,16 @@ export class RingManager {
     // Mixer device params
     const mixer = await track.get("mixer_device");
 
-    // Volume & Panning — skip for MIDI tracks (no meaningful mixer controls)
+    // Volume & Panning — all tracks (including MIDI) have these mixer controls
     let volumeParam: any = null;
     let panningParam: any = null;
 
-    if (!trackIsMidi) {
-      volumeParam = await mixer.get("volume");
+    // Volume & panning may be absent on empty MIDI tracks (no instrument).
+    // Guard with null checks so we degrade gracefully and still work once
+    // an instrument is added (re-subscription happens via ring refresh).
+    const rawVolumeParam = await mixer.get("volume");
+    if (rawVolumeParam?.raw != null) {
+      volumeParam = rawVolumeParam;
       state.volume = volumeParam.raw.value;
       await this.ringSubs.add(
         `track:${id}:volume`,
@@ -1208,8 +1208,11 @@ export class RingManager {
           }
         }),
       );
+    }
 
-      panningParam = await mixer.get("panning");
+    const rawPanningParam = await mixer.get("panning");
+    if (rawPanningParam?.raw != null) {
+      panningParam = rawPanningParam;
       state.panning = panningParam.raw.value;
       await this.ringSubs.add(
         `track:${id}:panning`,
@@ -1347,20 +1350,18 @@ export class RingManager {
       this.sendMessage({ evt: "RT_MUTE", i, v: state.mute });
       this.sendMessage({ evt: "RT_SOLO", i, v: state.solo });
       this.sendMessage({ evt: "RT_ARM", i, v: state.arm });
-      if (!state.isMidi) {
-        this.sendMessage({
-          evt: "RT_VOL",
-          i,
-          v: state.volume,
-          nv: state.volume,
-        });
-        this.sendMessage({
-          evt: "RT_PAN",
-          i,
-          v: state.panning,
-          nv: (state.panning + 1) / 2,
-        });
-      }
+      this.sendMessage({
+        evt: "RT_VOL",
+        i,
+        v: state.volume,
+        nv: state.volume,
+      });
+      this.sendMessage({
+        evt: "RT_PAN",
+        i,
+        v: state.panning,
+        nv: (state.panning + 1) / 2,
+      });
       this.sendMessage({
         evt: "RT_INFO",
         i,
